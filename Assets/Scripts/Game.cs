@@ -26,7 +26,17 @@ public partial class Game : MonoBehaviour
     // height so the waiting row fills the space above the front one.
     float BackLift => rowH * .36f;
     Vector3 BackOff => new(0, BackLift, .55f);
-    static readonly Vector3 CamHome = new(0, 0, -10);
+    // Camera looks slightly down (CamTilt) at the board's origin, so shelf tops and the shadows on them show
+    const float CamTilt = 10;
+    static readonly Vector3 CamHome = Quaternion.Euler(CamTilt, 0, 0) * new Vector3(0, 0, -10);
+
+    // where the screen point lands on the board plane (z = 0); the tilted camera makes the screen y != world y
+    Vector3 OnBoard(Vector2 screen)
+    {
+        var ray = cam.ScreenPointToRay(screen);
+        new Plane(Vector3.forward, Vector3.zero).Raycast(ray, out float d);
+        return ray.GetPoint(d);
+    }
     const float BackScale = .8f;
 
     List<List<int[]>> shelves;
@@ -52,12 +62,13 @@ public partial class Game : MonoBehaviour
         cam.orthographic = true;
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = Wall;
-        cam.transform.position = CamHome;
+        cam.transform.SetPositionAndRotation(CamHome, Quaternion.Euler(CamTilt, 0, 0));
         sun = new GameObject("Light").AddComponent<Light>();
         sun.type = LightType.Directional;
         sun.shadows = LightShadows.Soft;
-        sun.shadowStrength = .4f;
-        sun.transform.rotation = Quaternion.Euler(40, 30, 0); // from the upper left, so products read in 3/4
+        sun.shadowStrength = .65f;
+        // steep and mostly frontal: short shadows that land on the shelf right under/behind each product
+        sun.transform.rotation = Quaternion.Euler(55, 15, 0);
 
         foodModels = Foods.Select(f => Resources.Load<GameObject>(Pack + f)).ToArray();
         // All products share one colormap texture: one URP Lit material for all, one dark one for the waiting row
@@ -130,10 +141,12 @@ public partial class Game : MonoBehaviour
         {
             wall = GameObject.CreatePrimitive(PrimitiveType.Quad).transform; // sized to the view in FitCamera
             Destroy(wall.GetComponent<Collider>());
-            wall.position = new Vector3(0, 0, 3);
-            var m = new Material(GraphicsSettings.currentRenderPipeline.defaultMaterial);
-            m.SetFloat("_Smoothness", 0);
-            wall.GetComponent<Renderer>().material = m;
+            wall.position = new Vector3(0, 0, 1);
+            // Unlit (the pipeline's particle material, always shipped): no light and no shadows on the wall, whose
+            // colors show exactly as baked. URP Lit ignores Renderer.receiveShadows, so stray shelf shadows came through.
+            var wr = wall.GetComponent<Renderer>();
+            wr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            wr.material = new Material(GraphicsSettings.currentRenderPipeline.defaultParticleMaterial) { color = Color.white };
         }
         var mat = wall.GetComponent<Renderer>().material;
         Destroy(mat.mainTexture);
@@ -189,7 +202,7 @@ public partial class Game : MonoBehaviour
         cam.orthographicSize = size;
         float top = size - 2 * size * HudTopPx() / hv, bottom = -size + 2 * size * HudBottomPx() / hv;
         boardY = (top + bottom) / 2 - crown / 2;
-        wall.localScale = new Vector3(2 * size * cam.aspect + 2, 2 * size + 2, 1);
+        wall.localScale = new Vector3(2 * size * cam.aspect + 2, 2 * size + 4, 1); // + margin for the tilt
     }
 
     // GUI canvas pixels reserved above/below the board: these mirror the OnGUI layout
@@ -257,7 +270,7 @@ public partial class Game : MonoBehaviour
         go.transform.SetParent(root);
         go.transform.position = pos;
         var model = Instantiate(foodModels[id], go.transform);
-        model.transform.localRotation = Quaternion.Euler(-30, 0, 0) * Quaternion.Euler(0, 35, 0); // 3/4 view from slightly above
+        model.transform.localRotation = Quaternion.Euler(-20, 0, 0) * Quaternion.Euler(0, 35, 0); // 3/4 view; with the camera tilt, seen from ~30° above
         var rs = model.GetComponentsInChildren<Renderer>();
         foreach (var r in rs) r.sharedMaterials = Enumerable.Repeat(ghost ? ghostMat : foodMat, r.sharedMaterials.Length).ToArray();
         var b = rs[0].bounds;
@@ -297,8 +310,7 @@ public partial class Game : MonoBehaviour
         }
 
         // Touch is delivered as mouse (Input.simulateMouseWithTouches is on by default)
-        Vector3 world = cam.ScreenToWorldPoint(new Vector3(Input.mousePosition.x, Input.mousePosition.y, 10));
-        world.z = 0;
+        Vector3 world = OnBoard(Input.mousePosition);
 
         if (Input.GetMouseButtonDown(0) && !busy && !over && !Paused)
         {

@@ -51,7 +51,7 @@ public partial class Game
     float HeroWorldY()
     {
         float px = heroCenterPx > 0 ? heroCenterPx : Screen.height / GuiScale * .55f;
-        return cam.ScreenToWorldPoint(new Vector3(0, Screen.height - px * GuiScale, 10)).y - .7f; // .7: shelf under the products' middle
+        return OnBoard(new Vector2(Screen.width / 2f, Screen.height - px * GuiScale)).y - .7f; // .7: shelf under the products' middle
     }
 
     void RenderHome()
