@@ -74,6 +74,7 @@ public partial class Game : MonoBehaviour
 
         coins = PlayerPrefs.GetInt("coins", 0);
         world = PlayerPrefs.GetInt("world", 0); // the title screen shows the last played world's products
+        lvl = PlayerPrefs.GetInt("lvl", 0); // where the truck waits on the map
         Render();
     }
 
@@ -156,7 +157,29 @@ public partial class Game : MonoBehaviour
         combo = 0;
         lastMatch = -10;
         Render();
+
+        if (hard) Toast("NIVEAU DIFFICILE !");
+        // the first level with each obstacle explains it once
+        tipUntil = 0;
+        var all = shelves.SelectMany(sh => sh).SelectMany(r => r).ToList();
+        foreach (var (key, has, text) in new[]
+                 {
+                     ("back", shelves.Any(sh => sh.Count > 1), "Les produits du fond avancent quand la rangée de devant est vide"),
+                     ("ice",all.Any(LevelGen.IsFrozen), "Produit gelé : pose 2 produits pareils à côté pour le libérer"),
+                     ("box", all.Any(LevelGen.IsBoxed), "Carton mystère : attrape-le pour voir ce qu'il cache"),
+                     ("crate", all.Contains(LevelGen.Crate), "Caisse : fais un trio sur une étagère voisine pour la casser"),
+                 })
+            if (has && PlayerPrefs.GetInt("tip" + key, 0) == 0)
+            {
+                PlayerPrefs.SetInt("tip" + key, 1);
+                tip = text;
+                tipUntil = Time.time + 7;
+                break;
+            }
     }
+
+    string tip;
+    float tipUntil;
 
     // ---------- layout ----------
 
@@ -209,12 +232,17 @@ public partial class Game : MonoBehaviour
         views.Clear();
         heroes.Clear();
         FitCamera();
+        if (menu != Menu.Map) cam.transform.SetPositionAndRotation(CamHome, Quaternion.Euler(CamTilt, 0, 0)); // back from the map
         if (menu == Menu.Home)
         {
             RenderHome();
             return;
         }
-        if (menu is Menu.Worlds or Menu.Levels) return; // map screens: just the wall behind the GUI
+        if (menu == Menu.Map)
+        {
+            BuildMap(); // the camera moves over to it in UpdateMap
+            return;
+        }
 
         // one shelving unit for the whole board: back panel, three posts, crown on top
         float bottom = boardY - Rows * rowH / 2 - .11f, height = Rows * rowH + .11f;
@@ -257,11 +285,32 @@ public partial class Game : MonoBehaviour
     // Wraps the model in a pivot at its feet, so every product stands on its slot and fits a 1.04 wide x 1.45 tall box, whatever its native size.
     GameObject Item(int id, Vector3 pos, float scale, bool ghost, string name)
     {
-        var model = Instantiate(Model(LevelGen.Id(id)));
+        var model = Instantiate(id == LevelGen.Crate ? crateModel ??= Hidden(Products.Crate())
+            : LevelGen.IsBoxed(id) ? mysteryModel ??= Hidden(Products.Mystery())
+            : Model(LevelGen.Id(id)));
         model.SetActive(true); // procedural templates are kept inactive
-        // null keeps the model's own materials (procedural products)
-        var mat = ghost ? worldGhosts[world] : LevelGen.IsFrozen(id) ? worldIce[world] : worldMats[world];
-        return Wrap(model, pos, scale, name, mat);
+        // the waiting row keeps its real colors, only darker: in the shade at the back, yet still recognizable
+        if (ghost)
+            foreach (var r in model.GetComponentsInChildren<Renderer>())
+                r.sharedMaterials = r.sharedMaterials.Select(Dim).ToArray();
+        return Wrap(model, pos, scale, name, null);
+    }
+
+    readonly Dictionary<Material, Material> dimmed = new();
+
+    Material Dim(Material m)
+    {
+        if (!dimmed.TryGetValue(m, out var d))
+            dimmed[m] = d = new Material(m) { color = m.color * new Color(.5f, .5f, .58f) };
+        return d;
+    }
+
+    GameObject crateModel, mysteryModel; // obstacle templates, shared by every world
+
+    static GameObject Hidden(GameObject template)
+    {
+        template.SetActive(false);
+        return template;
     }
 
     // Puts a model instance in a pivot at its feet, sized to the slot; mat (if any) replaces its materials
@@ -337,6 +386,7 @@ public partial class Game : MonoBehaviour
     void Update()
     {
         AnimateHome();
+        UpdateMap();
         TickStars();
         if (!busy && !over && !Paused)
         {
@@ -351,14 +401,24 @@ public partial class Game : MonoBehaviour
         if (Input.GetMouseButtonDown(0) && !over && !Paused)
         {
             var (s, i) = NearestItem(world);
-            if (s >= 0 && LevelGen.IsFrozen(shelves[s][0][i]))
+            int x = s >= 0 ? shelves[s][0][i] : -1;
+            if (s >= 0 && !LevelGen.Movable(x))
             {
                 Fx.Play("back");
                 StartCoroutine(Fx.Squash(views[(s, i)].transform));
-                Toast("Glacé !");
+                Toast(x == LevelGen.Crate ? "Fais un trio à côté !" : "Glacé !");
             }
             else if (s >= 0)
             {
+                if (LevelGen.IsBoxed(x)) // the carton opens in the hand: swap its view for the product inside
+                {
+                    // ponytail: not in the undo history, so an undo puts the product back in its carton
+                    shelves[s][0][i] = LevelGen.Id(x);
+                    Destroy(views[(s, i)]);
+                    views[(s, i)] = Item(shelves[s][0][i], SlotPos(s, i), 1f, false, $"{s},{i}");
+                    Fx.Burst(SlotAim(s, i) + new Vector3(0, 0, -1), 12);
+                    Fx.Play("match", 1.4f);
+                }
                 dragS = s;
                 dragI = i;
                 dragGo = views[(s, i)];
@@ -496,6 +556,14 @@ public partial class Game : MonoBehaviour
                     views.Remove((s, i));
                 }
             }
+            // crates on the neighboring shelves burst open
+            foreach (var (s, i) in LevelGen.BreakCrates(shelves, hits))
+            {
+                Fx.Burst(SlotAim(s, i) + new Vector3(0, 0, -1), 25);
+                StartCoroutine(Fx.Shake(cam.transform, CamHome, .1f));
+                Destroy(views[(s, i)]);
+                views.Remove((s, i));
+            }
             locked.Clear();
         }
         busy = false;
@@ -506,9 +574,9 @@ public partial class Game : MonoBehaviour
 
     void DoShuffle()
     {
-        // frozen products stay put
+        // frozen products and crates stay put
         var cells = Enumerable.Range(0, shelves.Count).SelectMany(s => Enumerable.Range(0, 3).Select(i => (s, i)))
-            .Where(c => !LevelGen.IsFrozen(shelves[c.s][0][c.i])).ToList();
+            .Where(c => shelves[c.s][0][c.i] < 0 || LevelGen.Movable(shelves[c.s][0][c.i])).ToList();
         var vals = LevelGen.Shuffle(cells.Select(c => shelves[c.s][0][c.i]).ToList(), rng);
         for (int k = 0; k < cells.Count; k++) shelves[cells[k].s][0][cells[k].i] = vals[k];
     }
@@ -551,6 +619,7 @@ public partial class Game : MonoBehaviour
     static readonly Color Ink = new(.14f, .19f, .29f), Gold = new(1f, .76f, .24f), Red = new(.91f, .3f, .27f),
         Cream = new(1f, .98f, .93f), Mist = new(.84f, .9f, .95f);
     Texture2D round, circle;
+    Texture2D[] icons; // bonus bar: undo, shuffle, time
     GUIStyle pill, text;
 
     void InitGui()
@@ -595,13 +664,22 @@ public partial class Game : MonoBehaviour
     }
 
     // Chunky mobile button: darker lip underneath, face sinks onto it while pressed
-    bool Button(Rect r, string label, Color bg, int size = 46)
+    // With an icon: icon on top, label underneath as a caption.
+    bool Button(Rect r, string label, Color bg, int size = 46, Texture2D icon = null)
     {
         bool clicked = GUI.Button(r, GUIContent.none, GUIStyle.none);
         bool down = GUI.enabled && Input.GetMouseButton(0) && r.Contains(Event.current.mousePosition);
         Panel(new Rect(r.x, r.y + 14, r.width, r.height), Darker(bg));
         var face = down ? new Rect(r.x, r.y + 10, r.width, r.height) : r;
         Panel(face, bg);
+        if (icon)
+        {
+            float s = face.height * .55f;
+            GUI.color = Ink;
+            GUI.DrawTexture(new Rect(face.center.x - s / 2, face.y + face.height * .07f, s, s), icon);
+            GUI.color = Color.white;
+            face = new Rect(face.x, face.y + face.height * .6f, face.width, face.height * .36f);
+        }
         Label(face, label, size, Ink);
         return clicked;
     }
@@ -629,8 +707,7 @@ public partial class Game : MonoBehaviour
         switch (menu)
         {
             case Menu.Home: HomeScreen(W, H, k, top - 30, bottom); return;
-            case Menu.Worlds: WorldsScreen(W, H, top - 30, bottom); return;
-            case Menu.Levels: LevelsScreen(W, H, top - 30, bottom); return;
+            case Menu.Map: MapScreen(W, H, top - 30, bottom); return;
         }
         bool live = !busy && !over && menu == Menu.None;
 
@@ -657,17 +734,41 @@ public partial class Game : MonoBehaviour
         StoreFront(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20);
 
         // bonuses
+        // "+N" on the price strip: rows still hidden behind the visible back row
+        for (int s = 0; s < shelves.Count; s++)
+        {
+            int hidden = shelves[s].Skip(2).Count(r => r.Any(x => x >= 0));
+            if (hidden == 0) continue;
+            var c = ToGui(ShelfPos(s) + new Vector3(ShelfW / 2 - .4f, -.05f, -.83f));
+            var pill = new Rect(c.x - 45, c.y - 24, 90, 48);
+            Panel(pill, Ink);
+            Label(pill, $"+{hidden}", 32, Color.white);
+        }
+
+        // bonuses: icon + what it does; spent or unusable ones turn grey, the badge says how many are left
         float bw = 300, bh = 150, by = bottom - bh;
+        icons ??= new[] { Fx.Icon(0), Fx.Icon(1), Fx.Icon(2) };
         string[] names = { "Annuler", "Mélanger", "+15 s" };
         int[] left = { undoLeft, shuffleLeft, timeLeft };
         for (int b = 0; b < 3; b++)
         {
             float x = 45 + b * (bw + 45);
-            GUI.enabled = live && left[b] > 0 && (b != 0 || history.Count > 0);
-            if (Button(new Rect(x, by, bw, bh), names[b], Gold)) UseBonus(b);
-            Badge(x + bw - 44, by - 22, left[b].ToString());
+            bool usable = left[b] > 0 && (b != 0 || history.Count > 0);
+            GUI.enabled = live && usable;
+            if (Button(new Rect(x, by, bw, bh), names[b], usable ? Gold : Mist, 38, icons[b])) UseBonus(b);
+            GUI.enabled = true;
+            if (left[b] > 0) Badge(x + bw - 44, by - 22, left[b].ToString());
         }
         GUI.enabled = true;
+
+        // new obstacle explained, over the bottom of the board
+        if (Time.time < tipUntil && !over)
+        {
+            var card = new Rect(40, by - 230, W - 80, 180);
+            Panel(card, Ink);
+            Label(new Rect(card.x, card.y + 12, card.width, 50), "NOUVEAU !", 40, Gold);
+            Label(new Rect(card.x + 30, card.y + 60, card.width - 60, 110), tip, 38, Color.white);
+        }
 
         if (Time.time < toastUntil)
         {
@@ -691,7 +792,7 @@ public partial class Game : MonoBehaviour
         Panel(new Rect(sign.x, sign.y + 14, sign.width, sign.height), Darker(Cream));
         Panel(sign, Cream);
         Label(new Rect(sign.x, sign.y + 4, sign.width, 90), "SHELF SORT", 80, Red, true);
-        Label(new Rect(sign.x, sign.y + 88, sign.width, 40), "SUPÉRETTE · OUVERT 24/24", 32, Ink);
+        Label(new Rect(sign.x, sign.y + 88, sign.width, 40), $"{Worlds[world].name.ToUpper()} · OUVERT 24/24", 32, Ink);
 
         Awning((1080 - 10 * sw) / 2, sign.yMax + 25, 10, sw, awningH);
     }
@@ -762,7 +863,7 @@ public partial class Game : MonoBehaviour
         int r = 0;
         if (!adUsed && Button(rows[r++], time <= 0 ? "Pub : +15 secondes" : "Pub : annuler 2 coups", Gold, 46)) ContinueAfterAd();
         if (Button(rows[r++], "Recommencer", adUsed ? Gold : Mist, 46)) StartLevel();
-        if (Button(rows[r], "Niveaux", Mist, 46)) OpenMenu(Menu.Levels);
+        if (Button(rows[r], "Carte", Mist, 46)) OpenMenu(Menu.Map);
         GUI.matrix = keep;
     }
 }

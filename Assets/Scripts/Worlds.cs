@@ -7,26 +7,13 @@ public partial class Game
 {
     const int LevelsPerWorld = 20;
 
-    // items: 12 products per world, index = item id (null pack: built by the Products factory). need: total stars
-    // to open the world.
-    static readonly (string name, string pack, string[] items, int need, Color color)[] Worlds =
+    // Products of world w are built by Products.Make(w, id). need: total stars to open the world.
+    static readonly (string name, int need, Color color)[] Worlds =
     {
-        ("Supérette", null, null, 0, new Color(.91f, .3f, .27f)),
-        ("Boulangerie", "Kenney/", new[]
-        {
-            "donut-sprinkles", "cookie-chocolate", "cupcake", "croissant", "cake", "pie",
-            "waffle", "pancakes", "muffin", "whipped-cream", "loaf-baguette", "ginger-bread",
-        }, 35, new Color(.93f, .45f, .62f)),
-        ("Primeur", "Kenney/", new[]
-        {
-            "apple", "strawberry", "pineapple", "watermelon", "grapes", "pumpkin",
-            "lemon", "pear", "broccoli", "eggplant", "mushroom", "corn",
-        }, 80, new Color(.35f, .7f, .35f)),
-        ("Fast-food", "Kenney/", new[]
-        {
-            "burger-cheese", "fries", "hot-dog", "pizza", "taco", "soda",
-            "sandwich", "ice-cream", "sundae", "chinese", "frappe", "rice-ball",
-        }, 130, new Color(1f, .6f, .2f)),
+        ("Supérette", 0, new Color(.91f, .3f, .27f)),
+        ("Boulangerie", 35, new Color(.93f, .45f, .62f)),
+        ("Primeur", 80, new Color(.35f, .7f, .35f)),
+        ("Fast-food", 130, new Color(1f, .6f, .2f)),
     };
 
     int world, lvl; // the level being played (or last played)
@@ -50,45 +37,21 @@ public partial class Game
     static bool LevelOpen(int w, int l) => l == 0 || Done(w, l - 1);
     string LevelName => $"{world + 1}-{lvl + 1}";
 
-    // ---------- per-world products: models + one shared material each (every pack uses a single colormap) ----------
+    // ---------- per-world products: procedural templates, built once per world on first use ----------
 
     readonly GameObject[][] worldModels = new GameObject[Worlds.Length][];
-    readonly Material[] worldMats = new Material[Worlds.Length], worldGhosts = new Material[Worlds.Length],
-        worldIce = new Material[Worlds.Length];
 
     GameObject Model(int id)
     {
-        if (worldModels[world] == null && Worlds[world].pack == null)
+        worldModels[world] ??= Enumerable.Range(0, Products.Count).Select(i =>
         {
-            // procedural products carry their own textured materials: only the waiting-row silhouette is shared
-            // (frozen ones keep their own colors, the ice block says enough)
-            worldModels[world] = Enumerable.Range(0, Products.Count).Select(i =>
-            {
-                var p = Products.Make(i);
-                p.SetActive(false); // template, cloned by Item()
-                return p;
-            }).ToArray();
-            worldGhosts[world] = new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial)
-            {
-                color = new Color(.3f, .32f, .4f),
-            };
-        }
-        else if (worldModels[world] == null)
-        {
-            var w = Worlds[world];
-            worldModels[world] = w.items.Select(f => Resources.Load<GameObject>(w.pack + f)).ToArray();
-            var m = new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial)
-            {
-                mainTexture = worldModels[world][0].GetComponentInChildren<Renderer>().sharedMaterial.mainTexture,
-                color = Color.white,
-            };
-            m.SetFloat("_Smoothness", .2f);
-            worldMats[world] = m;
-            worldGhosts[world] = new Material(m) { color = new Color(.35f, .37f, .45f) };
-            worldIce[world] = new Material(m) { color = new Color(.62f, .85f, 1f) }; // frozen: icy blue tint
-        }
+            var p = Products.Make(world, i);
+            p.SetActive(false); // template, cloned by Item()
+            return p;
+        }).ToArray();
         return worldModels[world][id];
     }
+
 
     // ---------- stars ----------
 
@@ -108,6 +71,7 @@ public partial class Game
         coins += gained;
         PlayerPrefs.SetInt("coins", coins);
         PlayerPrefs.SetInt("world", world);
+        PlayerPrefs.SetInt("lvl", lvl);
         PlayerPrefs.Save();
 
         int after = TotalStars;
@@ -149,74 +113,6 @@ public partial class Game
         Panel(new Rect(x, y, 250, 96), Cream);
         Star(new Rect(x + 20, y + 16, 64, 64), true);
         Label(new Rect(x + 85, y, 150, 96), n.ToString(), 50, Ink);
-    }
-
-    // top of the map screens: awning, back button, star count, title
-    float MapHeader(float W, float safeTop, string backLabel, Menu back, string title, string sub)
-    {
-        Awning(0, 0, 9, 120, safeTop + 90);
-        float y = safeTop + 90 + 60 + 30;
-        if (Button(new Rect(40, y, 250, 96), backLabel, Mist, 40)) OpenMenu(back);
-        StarCount(W - 290, y, TotalStars);
-        Label(new Rect(0, y + 120, W, 130), title, 100, Red, true);
-        Label(new Rect(0, y + 245, W, 60), sub, 40, Ink);
-        return y + 330;
-    }
-
-    void WorldsScreen(float W, float H, float safeTop, float bottom)
-    {
-        float y = MapHeader(W, safeTop, "Retour", Menu.Home, "MONDES", $"{TotalStars} étoiles gagnées");
-        float cardH = Mathf.Min(260, (bottom - y) / Worlds.Length - 30);
-        for (int w = 0; w < Worlds.Length; w++)
-        {
-            var r = new Rect(60, y + w * (cardH + 30), W - 120, cardH);
-            bool open = WorldOpen(w);
-            GUI.enabled = open;
-            if (Button(r, "", open ? Cream : Mist))
-            {
-                world = w;
-                OpenMenu(Menu.Levels);
-            }
-            GUI.enabled = true;
-
-            // number badge in the world's color, name, stars or the lock condition
-            var badge = new Rect(r.x + 25, r.y + (cardH - 150) / 2, 150, 150);
-            Panel(badge, open ? Worlds[w].color : new Color(.6f, .64f, .7f));
-            Label(badge, (w + 1).ToString(), 90, Color.white, true);
-            Label(new Rect(r.x + 210, r.y + cardH / 2 - 80, r.width - 230, 80), Worlds[w].name, 64, open ? Ink : new Color(.4f, .45f, .55f), false, TextAnchor.MiddleLeft);
-            var line = new Rect(r.x + 210, r.y + cardH / 2 + 5, r.width - 230, 64);
-            if (open)
-            {
-                Star(new Rect(line.x, line.y + 4, 56, 56), true);
-                Label(new Rect(line.x + 70, line.y, 400, 64), $"{WorldStars(w)} / {LevelsPerWorld * 3}", 44, Ink, false, TextAnchor.MiddleLeft);
-            }
-            else
-            {
-                Label(line, $"Verrouillé : {Worlds[w].need} étoiles", 40, new Color(.4f, .45f, .55f), false, TextAnchor.MiddleLeft);
-            }
-        }
-    }
-
-    void LevelsScreen(float W, float H, float safeTop, float bottom)
-    {
-        float y = MapHeader(W, safeTop, "Mondes", Menu.Worlds, Worlds[world].name.ToUpper(),
-            $"Monde {world + 1} · {WorldStars(world)} / {LevelsPerWorld * 3} étoiles");
-
-        const int cols = 4;
-        int rows = LevelsPerWorld / cols;
-        float cell = Mathf.Min(220, (bottom - y) / rows - 20), gap = (W - cols * cell) / (cols + 1);
-        for (int l = 0; l < LevelsPerWorld; l++)
-        {
-            var r = new Rect(gap + (l % cols) * (cell + gap), y + (l / cols) * (cell + 20), cell, cell - 50);
-            bool open = LevelOpen(world, l);
-            GUI.enabled = open;
-            if (Button(r, open ? (l + 1).ToString() : "", open ? (Done(world, l) ? Gold : Cream) : Mist, 70))
-                PlayLevel(world, l);
-            GUI.enabled = true;
-            if (!open) Label(r, (l + 1).ToString(), 70, new Color(.6f, .64f, .7f));
-            for (int s = 0; s < 3; s++)
-                Star(new Rect(r.center.x - 75 + s * 50, r.yMax + 18, 50, 50), s < Stars(world, l));
-        }
     }
 
     // Win summary: stars (animated), why each one was earned, reward, what's next
@@ -266,14 +162,14 @@ public partial class Game
         }
 
         var next = new Rect(card.x + 60, card.yMax - 330, card.width - 120, 150);
-        bool last = lvl == LevelsPerWorld - 1;
-        if (Button(next, last ? "Mondes" : "Suivant", Gold, 56))
+        if (Button(next, "Suivant", Gold, 56))
         {
-            if (last) OpenMenu(Menu.Worlds);
-            else PlayLevel(world, lvl + 1);
+            // back to the map, where the truck drives on to the next level and starts it
+            OpenMenu(Menu.Map);
+            driveThenPlay = truckGoal != (int)truckT;
         }
         float half = (card.width - 150) / 2;
         if (Button(new Rect(card.x + 60, card.yMax - 150, half, 110), "Rejouer", Mist, 42)) PlayLevel(world, lvl);
-        if (Button(new Rect(card.x + 90 + half, card.yMax - 150, half, 110), "Niveaux", Mist, 42)) OpenMenu(Menu.Levels);
+        if (Button(new Rect(card.x + 90 + half, card.yMax - 150, half, 110), "Carte", Mist, 42)) OpenMenu(Menu.Map);
     }
 }

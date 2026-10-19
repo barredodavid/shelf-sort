@@ -6,7 +6,7 @@ using UnityEngine;
 // products (from the last played world); "JOUER" leads to the world map (Worlds.cs).
 public partial class Game
 {
-    enum Menu { None, Home, Pause, Worlds, Levels }
+    enum Menu { None, Home, Pause, Map }
 
     Menu menu = Menu.Home;
     float menuAt;
@@ -36,6 +36,7 @@ public partial class Game
         menu = m;
         menuAt = Time.time;
         Fx.Play("pick");
+        if (m == Menu.Map) EnterMap();
         if (m != Menu.Pause) Render(); // full screens replace the board (pause overlays it)
     }
 
@@ -116,7 +117,7 @@ public partial class Game
         float pulse = 1 + .03f * Mathf.Sin(Time.time * 4); // gently breathing call to action
         keep = GUI.matrix;
         GUIUtility.ScaleAroundPivot(Vector2.one * pulse, play.center * k);
-        if (Button(play, "JOUER", Gold, 110)) OpenMenu(Menu.Worlds);
+        if (Button(play, "JOUER", Gold, 110)) OpenMenu(Menu.Map);
         GUI.matrix = keep;
 
         heroCenterPx = (tag.yMax + starsY) / 2;
@@ -149,7 +150,7 @@ public partial class Game
         float bx = card.x + 70, bw = card.width - 140;
         if (Button(new Rect(bx, card.y + 230, bw, 140), "Reprendre", Gold, 54)) menu = Menu.None;
         if (Button(new Rect(bx, card.y + 410, bw, 130), "Recommencer", Mist, 46)) { StartLevel(); menu = Menu.None; }
-        if (Button(new Rect(bx, card.y + 580, bw, 130), "Niveaux", Mist, 46)) OpenMenu(Menu.Levels);
+        if (Button(new Rect(bx, card.y + 580, bw, 130), "Carte", Mist, 46)) OpenMenu(Menu.Map);
         if (Button(new Rect(bx, card.y + 750, bw, 110), SoundOn ? "Son : oui" : "Son : non", Mist, 40)) ToggleSound();
         GUI.matrix = keep;
     }
