@@ -2,29 +2,45 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// Procedural product factory: five shapes (bottle, can, jar spun from a silhouette; carton and cereal box built
-// face by face), each painted with a generated texture and a name written in a small stroke font.
-// Catalog() lists the 12 products of the procedural world.
-public static class Products
+// Procedural product factory: shapes spun from a silhouette (bottle, jar), built face by face (carton, cereal box,
+// crisps bag, cheese wedge) or assembled from primitives (eggs), painted with generated textures and names written
+// in a small stroke font. Supermarket() lists the supermarket world's 12 products; Food.cs the other worlds'.
+public static partial class Products
 {
     public const int Count = 12;
 
-    static Color C(string hex) => ColorUtility.TryParseHtmlString(hex, out var c) ? c : Color.magenta;
+    // product `id` of world `w`: 0 supermarket (this file), 1 bakery, 2 greengrocer, 3 fast food (Food.cs)
+    public static GameObject Make(int w, int id) => w switch
+    {
+        1 => Bakery(id),
+        2 => Greengrocer(id),
+        3 => FastFood(id),
+        _ => Supermarket(id),
+    };
+
+    // "#rrggbb" -> Color, cached: paint functions call it for every texel
+    static readonly Dictionary<string, Color> hexCache = new();
+    static Color C(string hex)
+    {
+        if (!hexCache.TryGetValue(hex, out var c))
+            hexCache[hex] = c = ColorUtility.TryParseHtmlString(hex, out var parsed) ? parsed : Color.magenta;
+        return c;
+    }
 
     // index = product id. Shapes and colors chosen so that no two products read alike at a glance.
-    public static GameObject Make(int id) => id switch
+    static GameObject Supermarket(int id) => id switch
     {
         0 => Bottle("SODA", liquid: C("#2a0f08"), label: C("#d92323"), cap: C("#d92323"), fill: .78f),
         1 => Carton("LAIT", body: C("#fbfbf7"), accent: C("#2f7ae5")),
         2 => Bottle("JUS", liquid: C("#ff9a1f"), label: C("#3fae4a"), cap: C("#3fae4a"), fill: .9f),
-        3 => Can("COLA", body: C("#e8312f"), text: Color.white),
+        3 => Eggs(),
         4 => Jar("MIEL", content: C("#f2a81d"), lid: C("#ffd23f"), label: C("#fff4d6"), ink: C("#a8620a")),
-        5 => CerealBox("CHOCO", main: C("#6b3a1e"), accent: C("#ffcf3f")),
-        6 => Can("LIMO", body: C("#9ad93a"), text: C("#1f5e1f")),
+        5 => CerealBox("CHOCO", main: C("#6b3a1e"), accent: C("#ffcf3f"), cereal: C("#b0642e")),
+        6 => Chips(),
         7 => Jar("FRAISE", content: C("#c2183a"), lid: C("#e8e3dc"), label: C("#ffe3ea"), ink: C("#c2183a")),
         8 => Bottle("EAU", liquid: C("#bfe9ff"), label: C("#1e88d8"), cap: C("#ffffff"), fill: .82f),
-        9 => CerealBox("FLAKES", main: C("#ffd23f"), accent: C("#e8312f")),
-        10 => Carton("THE", body: C("#d9f2df"), accent: C("#1f8f5b")),
+        9 => CerealBox("FLAKES", main: C("#ffd23f"), accent: C("#e8312f"), cereal: C("#e8a33c")),
+        10 => Cheese(),
         _ => Jar("CAFE", content: C("#3b2416"), lid: C("#2b2b2b"), label: C("#e9d8bf"), ink: C("#3b2416")),
     };
 
@@ -35,11 +51,6 @@ public static class Products
     {
         new(0, 0), new(.27f, 0), new(.32f, .03f), new(.34f, .1f), new(.34f, .72f), new(.31f, .84f),
         new(.2f, .97f), new(.13f, 1.04f), new(.13f, 1.1f), new(.155f, 1.115f), new(.155f, 1.27f), new(.13f, 1.3f), new(0, 1.3f),
-    };
-    static readonly Vector2[] CanProfile =
-    {
-        new(0, 0), new(.25f, 0), new(.29f, .02f), new(.3f, .06f), new(.3f, .84f), new(.27f, .9f), new(.25f, .92f),
-        new(.255f, .94f), new(0, .94f),
     };
     static readonly Vector2[] JarProfile =
     {
@@ -62,19 +73,6 @@ public static class Products
             : (v < fill ? liquid : clear) * Sheen(u));
         LatheText(cv, name, 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2 * H, (labelHi - labelLo) * H * .55f, Color.white);
         return Spun("Bottle", BottleProfile, cv, .6f);
-    }
-
-    static GameObject Can(string name, Color body, Color text)
-    {
-        const float H = .94f, R = .3f;
-        var cv = new Canvas(256, 256);
-        var metal = new Color(.82f, .84f, .86f);
-        cv.Paint((u, v) =>
-            v < .06f / H || v > .84f / H ? metal * Sheen(u)
-            : Mathf.Abs(v - .62f) < .02f ? Color.white // thin stripe under the name
-            : body * Sheen(u));
-        LatheText(cv, name, 2 * Mathf.PI * R, H, .43f, .26f, text);
-        return Spun("Can", CanProfile, cv, .7f);
     }
 
     static GameObject Jar(string name, Color content, Color lid, Color label, Color ink)
@@ -101,21 +99,141 @@ public static class Products
         return Built("Carton", BoxMesh(w, h, d, gable), cv, .3f);
     }
 
-    static GameObject CerealBox(string name, Color main, Color accent)
+    static GameObject CerealBox(string name, Color main, Color accent, Color cereal)
     {
         const float w = .72f, d = .26f, h = 1.05f;
         var cv = new Canvas(256, 256);
         cv.Paint((u, v) =>
         {
-            if (v >= BoxSide) return main; // top
-            // a bowl of cereal: a white disc low on each big face
-            float fu = Mathf.Repeat(u, .5f) / .5f, fv = v / BoxSide;
-            float dx = (fu - .5f) * w / h, dy = fv - .27f;
-            if (u < .5f && dx * dx + dy * dy < .2f * .2f) return dy > 0 ? accent : Color.white;
+            if (v >= BoxSide || u >= .5f) return main; // top and narrow sides
+            // a bowl of cereal low on each big face: white bowl with a colored rim, a heap of cereal on top
+            float fu = u / .5f, fv = v / BoxSide;
+            float x = (fu - .5f) * w / h, y = fv - .3f; // physical-ish units, origin at the bowl's rim
+            float bowl = x * x / (.3f * .3f) + y * y / (.16f * .16f);
+            if (y < 0 && bowl < 1) return y > -.025f ? accent : Color.Lerp(Color.white, new Color(.85f, .88f, .92f), -y / .16f);
+            float heap = x * x / (.27f * .27f) + y * y / (.12f * .12f);
+            if (y >= 0 && heap < 1)
+            {
+                // round pieces: lit centers, darker gaps between them
+                float cx = Mathf.Repeat(x * 30, 1) - .5f, cy = Mathf.Repeat(y * 30 + (int)(x * 30) * .5f, 1) - .5f;
+                return cereal * (cx * cx + cy * cy < .16f ? 1.1f : .7f);
+            }
             return main;
         });
         BoxText(cv, name, w, d, h, .7f, .2f, Color.white, Darker(main));
         return Built("CerealBox", BoxMesh(w, h, d, 0), cv, .3f);
+    }
+
+    // half-dozen eggs in an open grey cardboard tray, 2 rows of 3
+    static GameObject Eggs()
+    {
+        var root = new GameObject("Eggs");
+        var tray = Plain(C("#d3cab8"), .1f);
+        Part(root, Cube, tray, new(0, .08f, 0), scale: new(.92f, .16f, .62f));
+        // lid standing open at the back, its printed face towards the player
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) => v >= BoxSide ? C("#d3cab8") : Mathf.Abs(v / BoxSide - .75f) < .17f && u < .5f ? C("#f6c445") : C("#d3cab8"));
+        BoxText(cv, "OEUFS", .92f, .04f, .7f, .75f, .2f, C("#7a4a1c")); // high up: the eggs hide the lower half
+        Part(root, BoxMesh(.92f, .7f, .04f, 0), Textured(cv, .2f), new(0, .14f, .3f), new(-12, 0, 0));
+
+        // egg silhouette: round bottom, narrower taller top
+        var pts = new Vector2[17];
+        for (int i = 0; i <= 16; i++)
+        {
+            float a = Mathf.Lerp(-90, 90, i / 16f) * Mathf.Deg2Rad, s = Mathf.Sin(a);
+            pts[i] = new Vector2(Mathf.Max(0, Mathf.Cos(a) * .14f * (1 - .18f * Mathf.Max(0, s))), .14f + s * (s > 0 ? .21f : .14f));
+        }
+        var cup = Plain(C("#c4bba8"), .1f);
+        for (int i = 0; i < 6; i++)
+        {
+            var p = new Vector3((i % 3 - 1) * .29f, .14f, (i / 3 - .5f) * .27f);
+            Part(root, Cylinder, cup, p + new Vector3(0, .02f, 0), scale: new(.26f, .04f, .26f)); // molded cup
+            var egg = Plain(C(i % 3 == 1 ? "#e9c49c" : "#f5e6cf") * (.96f + .08f * (i % 2)), .35f);
+            Part(root, Lathe(pts, 20), egg, p);
+        }
+        return root;
+    }
+
+    // bag of crisps: red bag, crimped silver ends, a pile of chips under the name
+    static GameObject Chips()
+    {
+        var root = new GameObject("Chips");
+        const float w = .7f, h = .9f, d = .34f;
+        var red = C("#e8312f");
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) =>
+        {
+            float fu = Mathf.Repeat(u, .5f) / .5f, fv = v / BoxSide;
+            if (u < .5f && fv > .1f && fv < .42f && Dot(fu, fv, 6, 5, .8f, .32f, 3, out _)) return C("#f6c445"); // chips
+            return red;
+        });
+        BoxText(cv, "CHIPS", w, d, h, .64f, .22f, C("#ffd23f"), C("#7a1410"));
+        Part(root, BoxMesh(w, h, d, 0), Textured(cv, .6f), new(0, .02f, 0));
+        var foil = Plain(C("#d9dde3"), .8f);
+        Part(root, Cube, foil, new(0, .02f, 0), scale: new(w + .04f, .06f, d * .6f));
+        Part(root, Cube, foil, new(0, h + .02f, 0), scale: new(w + .04f, .08f, d * .6f));
+        return root;
+    }
+
+    // wedge of cheese: a triangular prism, yellow with holes on every face
+    static GameObject Cheese()
+    {
+        const float h = .42f;
+        Vector3 a = new(-.48f, 0, -.28f), b = new(.48f, 0, -.28f), c = new(0, 0, .5f), up = new(0, h, 0);
+        var verts = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var tris = new List<int>();
+        var center = (a + b + c) / 3 + up / 2;
+        void Face(Vector3[] p, Vector2[] uv) // flat face, wound to face away from the center
+        {
+            int i = verts.Count;
+            verts.AddRange(p);
+            uvs.AddRange(uv);
+            for (int k = 1; k + 1 < p.Length; k++)
+            {
+                bool outward = Vector3.Dot(Vector3.Cross(p[k] - p[0], p[k + 1] - p[0]), (p[0] + p[k] + p[k + 1]) / 3 - center) > 0;
+                tris.AddRange(outward ? new[] { i, i + k, i + k + 1 } : new[] { i, i + k + 1, i + k });
+            }
+        }
+        Vector2 Top(Vector3 p) => new(p.x + .5f, p.z + .5f);
+        Face(new[] { a + up, b + up, c + up }, new[] { Top(a), Top(b), Top(c) });
+        Face(new[] { a, b, c }, new[] { Top(a), Top(b), Top(c) });
+        foreach (var (p, q) in new[] { (a, b), (b, c), (c, a) })
+            Face(new[] { p, q, q + up, p + up }, new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
+
+        var mat = Paint((u, v) => Dot(u, v, 5, 4, .45f, .3f, 8, out _) ? C("#e8a92a") : C("#ffd23f"), .35f);
+        var go = new GameObject("Cheese");
+        Part(go, Finish(verts, uvs, tris), mat, Vector3.zero);
+        return go;
+    }
+
+    // ---------- obstacles (same in every world) ----------
+
+    // taped cardboard carton with a big "?": hides the product inside
+    public static GameObject Mystery()
+    {
+        const float s = .8f;
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) =>
+            v >= BoxSide || Mathf.Abs(v / BoxSide - .86f) < .06f ? C("#e8d2a6") // tape over the top and round the box
+            : C("#c99a5b") * (Mathf.Repeat(u, .5f) < .015f ? .8f : 1f)); // darker folded edges
+        BoxText(cv, "?", s, s, s, .42f, .6f, Color.white, C("#6b4320"));
+        return Built("Mystery", BoxMesh(s, s, s, 0), cv, .2f);
+    }
+
+    // wooden crate: frame, planks and a diagonal brace on every side
+    public static GameObject Crate()
+    {
+        var cv = new Canvas(256, 256);
+        var wood = C("#c58a45");
+        cv.Paint((u, v) =>
+        {
+            if (v >= BoxSide) return wood * .9f;
+            float fu = Mathf.Repeat(u, .5f) / .5f, fv = v / BoxSide;
+            if (fu < .1f || fu > .9f || fv < .1f || fv > .9f || Mathf.Abs(fu - fv) < .07f) return wood * .72f; // frame + brace
+            return Mathf.Repeat(fv * 3.7f, 1) < .06f ? wood * .5f : wood * (.95f + .1f * Hash((int)(fv * 3.7f), 0, 9)); // planks
+        });
+        return Built("Crate", BoxMesh(1, 1, 1, 0), cv, .15f);
     }
 
     // ---------- painting helpers ----------
@@ -162,9 +280,11 @@ public static class Products
     }
 
     // Spins a profile around Y. u runs around the axis, v up the height, so a texture paints it like a label.
-    static Mesh Lathe(Vector2[] profile, int segments)
+    // ribs/ribAmp modulate the radius around the axis (pumpkin lobes, paper-cup pleats). A profile that loops
+    // without touching the axis gives a torus (donut).
+    static Mesh Lathe(Vector2[] profile, int segments, int ribs = 0, float ribAmp = 0)
     {
-        float top = profile[^1].y;
+        float lo = profile.Min(p => p.y), span = Mathf.Max(profile.Max(p => p.y) - lo, 1e-4f); // v: 0 lowest, 1 highest
         var verts = new List<Vector3>();
         var uvs = new List<Vector2>();
         var tris = new List<int>();
@@ -172,8 +292,9 @@ public static class Products
             for (int s = 0; s <= segments; s++) // one extra column: the texture seam needs its own vertices
             {
                 float a = 2 * Mathf.PI * s / segments;
-                verts.Add(new Vector3(Mathf.Cos(a) * profile[p].x, profile[p].y, Mathf.Sin(a) * profile[p].x));
-                uvs.Add(new Vector2((float)s / segments, profile[p].y / top));
+                float r = profile[p].x * (1 + ribAmp * Mathf.Cos(ribs * a));
+                verts.Add(new Vector3(Mathf.Cos(a) * r, profile[p].y, Mathf.Sin(a) * r));
+                uvs.Add(new Vector2((float)s / segments, (profile[p].y - lo) / span));
             }
         int row = segments + 1;
         for (int p = 0; p < profile.Length - 1; p++)
