@@ -3,7 +3,7 @@ using System.Linq;
 using UnityEngine;
 
 // Title screen and pause menu. The title screen shows the logo over a little display shelf of hopping
-// products (from the last played world); "JOUER" leads to the world map (Worlds.cs).
+// products (one per country); "JOUER" leads to the map (Map.cs).
 public partial class Game
 {
     enum Menu { None, Home, Pause, Map }
@@ -15,7 +15,8 @@ public partial class Game
     Transform heroRoot;
     readonly List<Transform> heroes = new();
     float heroCenterPx = -1; // GUI-canvas y where the display shelf sits, set by HomeScreen's layout
-    static readonly int[] HeroIds = { 0, 1, 3, 9, 11 };
+    // one product per country: croissant, pizza, maki, burger, dango
+    static readonly (int w, int id)[] Heroes = { (0, 1), (1, 0), (2, 0), (3, 0), (2, 4) };
 
     bool Paused => shopOpen || menu != Menu.None;
 
@@ -54,9 +55,9 @@ public partial class Game
         heroRoot.SetParent(root);
         Box(new Vector3(0, -.11f, 0), new Vector3(7.6f, .22f, 1.6f), WoodC).transform.SetParent(heroRoot);
         Box(new Vector3(0, -.13f, -.81f), new Vector3(7.6f, .16f, .02f), Cream).transform.SetParent(heroRoot);
-        for (int i = 0; i < HeroIds.Length; i++)
+        for (int i = 0; i < Heroes.Length; i++)
         {
-            var t = Item(HeroIds[i], new Vector3((i - 2) * 1.45f, 0, 0), 1.3f, false, "hero").transform;
+            var t = Wrap(Products.Make(Heroes[i].w, Heroes[i].id), new Vector3((i - 2) * 1.45f, 0, 0), 1.3f, "hero", null).transform;
             t.SetParent(heroRoot, false);
             heroes.Add(t);
         }
@@ -97,7 +98,7 @@ public partial class Game
         GUI.matrix = keep;
         var tag = new Rect(W / 2 - 340, ly + 390, 680, 80);
         Panel(tag, Ink);
-        Label(tag, "LE PUZZLE DE LA SUPÉRETTE", 38, Color.white);
+        Label(tag, "LE TOUR DU MONDE DES RAYONS", 38, Color.white);
 
         // bottom block, from the bottom up: renovation progress, renovation, stars, play
         int done = Enumerable.Range(0, Upgrades.Length).Count(Owned);

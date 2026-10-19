@@ -1,19 +1,19 @@
 using System.Linq;
 using UnityEngine;
 
-// Worlds of 20 levels, each with its own product theme. Levels give 1-3 stars; stars unlock the next worlds.
+// Worlds of 20 levels, one country each with its own products. Levels give 1-3 stars; stars unlock the next countries.
 // Level (world w, index l) plays baked level w * 20 + l + 1, so difficulty keeps climbing from world to world.
 public partial class Game
 {
     const int LevelsPerWorld = 20;
 
-    // Products of world w are built by Products.Make(w, id). need: total stars to open the world.
+    // One country per world; its products are built by Products.Make(w, id). need: total stars to open it.
     static readonly (string name, int need, Color color)[] Worlds =
     {
-        ("Supérette", 0, new Color(.91f, .3f, .27f)),
-        ("Boulangerie", 35, new Color(.93f, .45f, .62f)),
-        ("Primeur", 80, new Color(.35f, .7f, .35f)),
-        ("Fast-food", 130, new Color(1f, .6f, .2f)),
+        ("France", 0, new Color(.23f, .44f, .85f)),
+        ("Italie", 35, new Color(.18f, .62f, .31f)),
+        ("Japon", 80, new Color(.88f, .19f, .23f)),
+        ("États-Unis", 130, new Color(.95f, .55f, .15f)),
     };
 
     int world, lvl; // the level being played (or last played)
@@ -76,7 +76,7 @@ public partial class Game
 
         int after = TotalStars;
         int opened = Enumerable.Range(1, Worlds.Length - 1).FirstOrDefault(w => before < Worlds[w].need && after >= Worlds[w].need);
-        unlockedMsg = opened > 0 ? $"Monde {opened + 1} débloqué : {Worlds[opened].name} !" : null;
+        unlockedMsg = opened > 0 ? $"Nouveau pays débloqué : {Worlds[opened].name} !" : null;
     }
 
     // stars pop in one after another on the summary, each with a rising note

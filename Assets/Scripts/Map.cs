@@ -34,14 +34,14 @@ public partial class Game
         return y;
     }
 
-    static Vector3 MapPos(float t) => MapO + new Vector3(1.5f * Mathf.Sin(t * .6f), 0, MapY(t) * MapScale);
+    static Vector3 MapPos(float t) => MapO + new Vector3(1.1f * Mathf.Sin(t * .6f), 0, MapY(t) * MapScale);
 
     static float GateT(int w) => w == 0 ? -1.1f : w * LevelsPerWorld - .5f;
 
     static float Hash01(int a, int b) => Mathf.Abs(Mathf.Sin(a * 12.9898f + b * 78.233f) * 43758.5453f) % 1;
 
-    // every world is reachable while testing in the editor
-    bool Reachable(int g) => (openWorlds[g / LevelsPerWorld] || Application.isEditor) && LevelOpen(g / LevelsPerWorld, g % LevelsPerWorld);
+    // every country and every level is open while testing in the editor (see also openWorlds)
+    bool Reachable(int g) => openWorlds[g / LevelsPerWorld] && (LevelOpen(g / LevelsPerWorld, g % LevelsPerWorld) || Application.isEditor);
 
     // the truck parks just short of its level's pad, so the pad and its number stay in view
     Vector3 TruckPos(float t) => MapPos(t);
@@ -51,7 +51,7 @@ public partial class Game
     {
         var d = MapPos(g + .05f) - MapPos(g - .05f);
         var right = new Vector3(d.z, 0, -d.x).normalized;
-        return MapPos(g) + right * (g % 2 == 0 ? 1.3f : -1.3f); // alternating sides: neighbors never crowd
+        return MapPos(g) + right * (g % 2 == 0 ? 1.95f : -1.95f); // alternating sides: neighbors never crowd
     }
 
     float CenterZ(float t) => MapPos(t).z + 1.2f; // scroll that keeps t a little below the middle of the screen
@@ -59,7 +59,7 @@ public partial class Game
     void EnterMap()
     {
         mapStars = TotalStars;
-        for (int w = 0; w < Worlds.Length; w++) openWorlds[w] = mapStars >= Worlds[w].need;
+        for (int w = 0; w < Worlds.Length; w++) openWorlds[w] = mapStars >= Worlds[w].need || Application.isEditor;
         int cur = world * LevelsPerWorld + lvl;
         truckT = truckGoal = cur;
         driveThenPlay = false;
@@ -105,8 +105,8 @@ public partial class Game
         {
             int w = g / LevelsPerWorld, l = g % LevelsPerWorld;
             bool open = Reachable(g), tough = (l + 1) % 5 == 0; // every 5th level is HARD (LevelGen.Generate)
-            var c = !open ? new Color(.72f, .76f, .82f) : tough ? Red : Done(w, l) ? Gold : Cream;
-            var pad = Products.Pad(c).transform;
+            var awning = !open ? new Color(.62f, .66f, .72f) : tough ? (w == 2 ? Ink : Red) : Worlds[w].color; // Japan is already red
+            var pad = Products.Shop(w, awning, open).transform;
             pad.SetParent(mapRoot);
             pad.position = PadPos(g);
             Products.Place(mapRoot, Products.Ribbon(new[] { MapPos(g), PadPos(g) }, .55f), C2("#fbf8f0"), new Vector3(0, .015f, 0)); // driveway
@@ -125,6 +125,31 @@ public partial class Game
             bar.position = gate.position + new Vector3(0, 0, -.5f);
         }
 
+        // each country's monument, just past its gate (before the start for the first), on the side away from the road
+        var landmarks = new List<Vector3>();
+        for (int w = 0; w < Worlds.Length; w++)
+        {
+            float t = w == 0 ? -2.3f : GateT(w) + .25f;
+            var p = MapPos(t);
+            var at = new Vector3(MapO.x + (p.x > MapO.x ? -1 : 1) * (w == 2 ? 3f : 2.5f), 0, p.z + (w == 2 ? .8f : 0));
+            var lm = Products.Landmark(w).transform;
+            lm.SetParent(mapRoot);
+            lm.position = at;
+            if (w == 2) lm.localScale = Vector3.one * .65f; // Fuji is wide
+            landmarks.Add(at);
+        }
+
+        // end of the road: works in progress until the next country ships
+        var end = Products.Barrier().transform;
+        end.SetParent(mapRoot);
+        end.position = MapPos(TotalLevels - .35f);
+        for (int k = 0; k < 3; k++)
+        {
+            var cone = Products.Cone().transform;
+            cone.SetParent(mapRoot);
+            cone.position = MapPos(TotalLevels - .1f + k * .2f) + new Vector3((k - 1) * .4f, 0, 0);
+        }
+
         // decor on both sides, kept clear of the road
         for (float t = -4; t < TotalLevels + 6; t += .3f)
             for (int side = 0; side < 2; side++)
@@ -136,7 +161,8 @@ public partial class Game
                 float x = MapO.x + (side == 0 ? -1 : 1) * (2.4f + 1.6f * Hash01(k, side + 7));
                 if (Mathf.Abs(x - p.x) < 2.4f || Mathf.Abs(x - MapPos(t + .4f).x) < 2.4f || Mathf.Abs(x - MapPos(t - .4f).x) < 2.4f) continue;
                 int near = Mathf.Clamp(Mathf.RoundToInt(t), 0, TotalLevels - 1);
-                if (Vector2.Distance(new Vector2(x, p.z), new Vector2(PadPos(near).x, PadPos(near).z)) < 1.5f) continue; // clear of the pads
+                if (Vector2.Distance(new Vector2(x, p.z), new Vector2(PadPos(near).x, PadPos(near).z)) < 1.9f) continue; // clear of the pads
+                if (landmarks.Exists(m => Vector2.Distance(new Vector2(x, p.z), new Vector2(m.x, m.z)) < 2.8f)) continue; // and of the monuments
                 int w = Mathf.Clamp(Mathf.FloorToInt((t + .5f) / LevelsPerWorld), 0, Worlds.Length - 1);
                 var d = Products.Decor(w, Hash01(k, side + 3)).transform;
                 d.SetParent(mapRoot);
@@ -221,7 +247,7 @@ public partial class Game
         for (int g = 0; g < pads.Count; g++)
         {
             float s = g == nextLevel ? 1 + .07f * Mathf.Sin(Time.time * 5) : 1;
-            pads[g].localScale = new Vector3(s, 1, s);
+            pads[g].localScale = Vector3.one * s;
         }
 
         // truck: rebuilt with the color of the world it drives through
@@ -260,7 +286,7 @@ public partial class Game
         if (p.y < SafeTopPx() + 150 || p.y > Screen.height / GuiScale - SafeBottomPx() - 230) return; // header and the JOUER button
         for (int g = 0; g < TotalLevels; g++)
         {
-            if (Vector2.Distance(p, ToGui(PadPos(g) + new Vector3(0, .32f, 0))) > 90) continue;
+            if (Vector2.Distance(p, ToGui(PadPos(g) + new Vector3(0, .6f, 0))) > 110) continue;
             if (!Reachable(g))
             {
                 Fx.Play("back");
@@ -289,7 +315,7 @@ public partial class Game
         {
             var board = ToGui(new Vector3(MapPos(GateT(w)).x, 2.05f, MapPos(GateT(w)).z));
             if (board.y < -200 || board.y > H + 200) continue;
-            Label(new Rect(board.x - 200, board.y - 62, 400, 50), $"MONDE {w + 1}", 34, Color.white, true);
+            Label(new Rect(board.x - 200, board.y - 62, 400, 50), $"PAYS {w + 1}", 34, Color.white, true);
             Label(new Rect(board.x - 200, board.y - 18, 400, 70), Worlds[w].name.ToUpper(), 52, Color.white, true);
             if (openWorlds[w]) continue;
             var at = ToGui(new Vector3(MapPos(GateT(w)).x, 0, MapPos(GateT(w)).z - 1.4f));
@@ -299,23 +325,35 @@ public partial class Game
             Label(new Rect(lockTag.x + 85, lockTag.y, lockTag.width - 100, 80), $"{Worlds[w].need} pour ouvrir", 38, Color.white);
         }
 
-        // numbers on the pads, "DUR" above hard ones, stars under finished ones
+        // the works at the end of the road
+        var soon = ToGui(MapPos(TotalLevels + .15f) + new Vector3(0, 1, 0));
+        if (soon.y > -150 && soon.y < H + 150)
+        {
+            var sign = new Rect(soon.x - 280, soon.y - 70, 560, 140);
+            Panel(new Rect(sign.x, sign.y + 12, sign.width, sign.height), Darker(Gold));
+            Panel(sign, Gold);
+            Label(new Rect(sign.x, sign.y + 10, sign.width, 60), "PROCHAIN PAYS", 48, Ink);
+            Label(new Rect(sign.x, sign.y + 70, sign.width, 50), "BIENTÔT !", 40, Red);
+        }
+
+        // numbers on the shops' signs, "DUR" above hard ones, stars under finished ones
         for (int g = 0; g < TotalLevels; g++)
         {
-            var c = ToGui(PadPos(g) + new Vector3(0, .32f, 0));
+            var c = ToGui(PadPos(g) + new Vector3(0, Products.SignY, -.48f)); // the shop's sign
             if (c.y < -150 || c.y > H + 150) continue;
             int w = g / LevelsPerWorld, l = g % LevelsPerWorld;
             bool open = Reachable(g), tough = (l + 1) % 5 == 0;
-            Label(new Rect(c.x - 80, c.y - 45, 160, 90), (l + 1).ToString(), 62,
-                !open ? new Color(.5f, .55f, .62f) : tough ? Color.white : Ink, open && tough);
+            Label(new Rect(c.x - 80, c.y - 34, 160, 70), (l + 1).ToString(), 48,
+                !open ? new Color(.55f, .6f, .66f) : tough ? Red : Ink);
             if (tough)
             {
-                var tag = new Rect(c.x - 50, c.y - 112, 100, 44);
+                var tag = new Rect(c.x - 50, c.y - 82, 100, 44);
                 Panel(tag, Ink);
                 Label(tag, "DUR", 28, Color.white);
             }
             if (!Done(w, l)) continue;
-            var pill = new Rect(c.x - 96, c.y + 62, 192, 64); // stars on a dark pill, so gold reads on any ground
+            var front = ToGui(PadPos(g) + new Vector3(0, 0, -.8f)); // the pavement's front edge
+            var pill = new Rect(front.x - 96, front.y + 4, 192, 64); // stars on a dark pill, so gold reads on any ground
             Panel(pill, new Color(Ink.r, Ink.g, Ink.b, .85f));
             for (int k = 0; k < 3; k++)
             {
@@ -333,9 +371,9 @@ public partial class Game
         // "you are here": a bouncing tag over the next level to play, and a big button that drives there and starts it
         if (nextLevel >= 0)
         {
-            var c = ToGui(PadPos(nextLevel) + new Vector3(0, .32f, 0));
+            var c = ToGui(PadPos(nextLevel) + new Vector3(0, Products.SignY, -.48f));
             float hop = 14 * Mathf.Abs(Mathf.Sin(Time.time * 4));
-            var tag = new Rect(c.x - 85, c.y - ((nextLevel % LevelsPerWorld + 1) % 5 == 0 ? 210 : 160) - hop, 170, 70);
+            var tag = new Rect(c.x - 85, c.y - ((nextLevel % LevelsPerWorld + 1) % 5 == 0 ? 150 : 110) - hop, 170, 70);
             Panel(new Rect(tag.x, tag.y + 8, tag.width, tag.height), Darker(Gold));
             Panel(tag, Gold);
             Label(tag, "À TOI !", 36, Ink);

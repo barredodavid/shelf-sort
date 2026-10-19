@@ -1,60 +1,76 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Procedural food for the bakery, greengrocer and fast-food worlds. Products are assembled from parts:
+// Procedural food: the four countries' catalogs (France, Italy, Japan, USA) and their products. Products are assembled from parts:
 // spun silhouettes (Lathe, optionally ribbed or looping into a torus), Unity's primitive meshes, plain colors
 // and painted textures (sprinkles, chips, seeds, dots, stripes). All sizes are relative: Game.Wrap fits each
 // product to its slot.
 public static partial class Products
 {
-    // ---------- worlds ----------
+    // ---------- countries: 12 products each ----------
 
-    static GameObject Bakery(int id) => id switch
+    static GameObject France(int id) => id switch
     {
-        0 => Donut("DonutRose", C("#f58fb5"), sprinkles: true),
-        1 => Donut("DonutChoco", C("#5a3018"), sprinkles: false),
-        2 => Cupcake(),
-        3 => Croissant(),
-        4 => Baguette(),
+        0 => Baguette(),
+        1 => Croissant(),
+        2 => Macaron(),
+        3 => Eclair(),
+        4 => Tarte(),
         5 => Miche(),
-        6 => Macaron(),
-        7 => Cookie(),
-        8 => Tarte(),
-        9 => Muffin(),
-        10 => Eclair(),
-        _ => Gateau(),
+        6 => Cheese(),
+        7 => Gateau(),
+        8 => Camembert(),
+        9 => Jar("CONFITURE", content: C("#c2183a"), lid: C("#e8e3dc"), label: C("#ffe3ea"), ink: C("#c2183a")),
+        10 => Bottle("EAU", liquid: C("#bfe9ff"), label: C("#1e88d8"), cap: C("#ffffff"), fill: .82f),
+        _ => Carton("LAIT", body: C("#fbfbf7"), accent: C("#2f7ae5")),
     };
 
-    static GameObject Greengrocer(int id) => id switch
+    static GameObject Italy(int id) => id switch
     {
-        0 => Pomme(),
-        1 => Orange(),
-        2 => Citron(),
-        3 => Poire(),
-        4 => Tomate(),
-        5 => Citrouille(),
-        6 => Aubergine(),
-        7 => Carotte(),
-        8 => Raisin(),
-        9 => Fraise(),
+        0 => Pizza(),
+        1 => Tomate(),
+        2 => Cornet(),
+        3 => Raisin(),
+        4 => Pasta(),
+        5 => Bottle("HUILE", liquid: C("#b5bd2c"), label: C("#1f5e2e"), cap: C("#d9b44a"), fill: .85f),
+        6 => Citron(),
+        7 => Aubergine(),
+        8 => Mozzarella(),
+        9 => Pasteque(),
         10 => Champignon(),
-        _ => Pasteque(),
+        _ => Espresso(),
     };
 
-    static GameObject FastFood(int id) => id switch
+    static GameObject Japan(int id) => id switch
+    {
+        0 => Maki(),
+        1 => Nigiri(),
+        2 => Onigiri(),
+        3 => Ramen(),
+        4 => Dango(),
+        5 => Bento(),
+        6 => Matcha(),
+        7 => Takoyaki(),
+        8 => Tempura(),
+        9 => Gyoza(),
+        10 => Bottle("RAMUNE", liquid: C("#d6f3ff"), label: C("#2f7ae5"), cap: C("#2f7ae5"), fill: .8f),
+        _ => Edamame(),
+    };
+
+    static GameObject Usa(int id) => id switch
     {
         0 => Burger(),
         1 => Frites(),
         2 => HotDog(),
-        3 => Pizza(),
+        3 => Popcorn(),
         4 => SodaCup(),
-        5 => Cornet(),
-        6 => Milkshake(),
-        7 => Popcorn(),
+        5 => Milkshake(),
+        6 => Donut("DonutRose", C("#f58fb5"), sprinkles: true),
+        7 => Pilon(),
         8 => Ketchup(),
-        9 => Pilon(),
-        10 => Burrito(),
-        _ => Cafe(),
+        9 => Cookie(),
+        10 => Muffin(),
+        _ => Cupcake(),
     };
 
     // ---------- bakery ----------
@@ -127,7 +143,7 @@ public static partial class Products
     static GameObject Croissant()
     {
         var root = new GameObject("Croissant");
-        float Radius(float t) => .21f * Mathf.Pow(Mathf.Sin(Mathf.PI * t), .55f) * (1 - .16f * Mathf.Pow(Mathf.Abs(Mathf.Cos(5 * Mathf.PI * t)), 6));
+        float Radius(float t) => .21f * Mathf.Pow(Mathf.Abs(Mathf.Sin(Mathf.PI * t)), .55f) * (1 - .16f * Mathf.Pow(Mathf.Abs(Mathf.Cos(5 * Mathf.PI * t)), 6));
         Vector3 Center(float t)
         {
             float a = Mathf.Lerp(-80, 80, t) * Mathf.Deg2Rad;
@@ -705,6 +721,6 @@ public static partial class Products
     }
 
     static Transform Spin(GameObject root, Vector2[] profile, Material mat, Vector3 pos = default, Vector3 euler = default,
-        int ribs = 0, float ribAmp = 0, Vector3? scale = null) =>
-        Part(root, Lathe(profile, 32, ribs, ribAmp), mat, pos, euler, scale);
+        int ribs = 0, float ribAmp = 0, Vector3? scale = null, int segments = 32) =>
+        Part(root, Lathe(profile, segments, ribs, ribAmp), mat, pos, euler, scale);
 }

@@ -4,18 +4,18 @@ using UnityEngine;
 
 // Procedural product factory: shapes spun from a silhouette (bottle, jar), built face by face (carton, cereal box,
 // crisps bag, cheese wedge) or assembled from primitives (eggs), painted with generated textures and names written
-// in a small stroke font. Supermarket() lists the supermarket world's 12 products; Food.cs the other worlds'.
+// in a small stroke font. Food.cs holds each country's catalog and its other products.
 public static partial class Products
 {
     public const int Count = 12;
 
-    // product `id` of world `w`: 0 supermarket (this file), 1 bakery, 2 greengrocer, 3 fast food (Food.cs)
+    // product `id` of world `w`: one country per world (catalogs in Food.cs)
     public static GameObject Make(int w, int id) => w switch
     {
-        1 => Bakery(id),
-        2 => Greengrocer(id),
-        3 => FastFood(id),
-        _ => Supermarket(id),
+        0 => France(id),
+        1 => Italy(id),
+        2 => Japan(id),
+        _ => Usa(id),
     };
 
     // "#rrggbb" -> Color, cached: paint functions call it for every texel
@@ -26,23 +26,6 @@ public static partial class Products
             hexCache[hex] = c = ColorUtility.TryParseHtmlString(hex, out var parsed) ? parsed : Color.magenta;
         return c;
     }
-
-    // index = product id. Shapes and colors chosen so that no two products read alike at a glance.
-    static GameObject Supermarket(int id) => id switch
-    {
-        0 => Bottle("SODA", liquid: C("#2a0f08"), label: C("#d92323"), cap: C("#d92323"), fill: .78f),
-        1 => Carton("LAIT", body: C("#fbfbf7"), accent: C("#2f7ae5")),
-        2 => Bottle("JUS", liquid: C("#ff9a1f"), label: C("#3fae4a"), cap: C("#3fae4a"), fill: .9f),
-        3 => Eggs(),
-        4 => Jar("MIEL", content: C("#f2a81d"), lid: C("#ffd23f"), label: C("#fff4d6"), ink: C("#a8620a")),
-        5 => CerealBox("CHOCO", main: C("#6b3a1e"), accent: C("#ffcf3f"), cereal: C("#b0642e")),
-        6 => Chips(),
-        7 => Jar("FRAISE", content: C("#c2183a"), lid: C("#e8e3dc"), label: C("#ffe3ea"), ink: C("#c2183a")),
-        8 => Bottle("EAU", liquid: C("#bfe9ff"), label: C("#1e88d8"), cap: C("#ffffff"), fill: .82f),
-        9 => CerealBox("FLAKES", main: C("#ffd23f"), accent: C("#e8312f"), cereal: C("#e8a33c")),
-        10 => Cheese(),
-        _ => Jar("CAFE", content: C("#3b2416"), lid: C("#2b2b2b"), label: C("#e9d8bf"), ink: C("#3b2416")),
-    };
 
     // ---------- shapes ----------
 
@@ -178,12 +161,20 @@ public static partial class Products
     // wedge of cheese: a triangular prism, yellow with holes on every face
     static GameObject Cheese()
     {
-        const float h = .42f;
-        Vector3 a = new(-.48f, 0, -.28f), b = new(.48f, 0, -.28f), c = new(0, 0, .5f), up = new(0, h, 0);
+        var mat = Paint((u, v) => Dot(u, v, 5, 4, .45f, .3f, 8, out _) ? C("#e8a92a") : C("#ffd23f"), .35f);
+        var go = new GameObject("Cheese");
+        Part(go, Prism(new(-.48f, 0, -.28f), new(.48f, 0, -.28f), new(0, 0, .5f), new(0, .42f, 0)), mat, Vector3.zero);
+        return go;
+    }
+
+    // triangle a b c pushed along `extrude` into a solid with flat faces. The two triangles map their own
+    // (x, z) or (x, y) onto uv; each side face gets the whole 0..1 square.
+    static Mesh Prism(Vector3 a, Vector3 b, Vector3 c, Vector3 extrude)
+    {
         var verts = new List<Vector3>();
         var uvs = new List<Vector2>();
         var tris = new List<int>();
-        var center = (a + b + c) / 3 + up / 2;
+        var center = (a + b + c) / 3 + extrude / 2;
         void Face(Vector3[] p, Vector2[] uv) // flat face, wound to face away from the center
         {
             int i = verts.Count;
@@ -195,16 +186,13 @@ public static partial class Products
                 tris.AddRange(outward ? new[] { i, i + k, i + k + 1 } : new[] { i, i + k + 1, i + k });
             }
         }
-        Vector2 Top(Vector3 p) => new(p.x + .5f, p.z + .5f);
-        Face(new[] { a + up, b + up, c + up }, new[] { Top(a), Top(b), Top(c) });
-        Face(new[] { a, b, c }, new[] { Top(a), Top(b), Top(c) });
+        bool flatY = Mathf.Abs(extrude.y) > Mathf.Abs(extrude.z); // triangle lying in XZ, else standing in XY
+        Vector2 Uv(Vector3 p) => flatY ? new Vector2(p.x + .5f, p.z + .5f) : new Vector2(p.x + .5f, p.y);
+        Face(new[] { a + extrude, b + extrude, c + extrude }, new[] { Uv(a), Uv(b), Uv(c) });
+        Face(new[] { a, b, c }, new[] { Uv(a), Uv(b), Uv(c) });
         foreach (var (p, q) in new[] { (a, b), (b, c), (c, a) })
-            Face(new[] { p, q, q + up, p + up }, new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
-
-        var mat = Paint((u, v) => Dot(u, v, 5, 4, .45f, .3f, 8, out _) ? C("#e8a92a") : C("#ffd23f"), .35f);
-        var go = new GameObject("Cheese");
-        Part(go, Finish(verts, uvs, tris), mat, Vector3.zero);
-        return go;
+            Face(new[] { p, q, q + extrude, p + extrude }, new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) });
+        return Finish(verts, uvs, tris);
     }
 
     // ---------- obstacles (same in every world) ----------
