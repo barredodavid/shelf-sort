@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -200,6 +201,65 @@ public static class Fx
     }
 
     // White rounded square; used as a 9-sliced IMGUI background, tinted with GUI.backgroundColor
+    // Bonus-bar icons, white on transparent: 0 undo arrow, 1 shuffle arrows, 2 stopwatch. Round pen strokes
+    // (distance to segments, like StrokeFont) plus triangular arrowheads, in a 0..1 box with y up.
+    public static Texture2D Icon(int kind, int size = 128)
+    {
+        var s = new StrokeFont.Strokes();
+        var heads = new List<Vector2[]>();
+        void Line(params Vector2[] p) { for (int i = 0; i + 1 < p.Length; i++) s.Segments.Add((p[i], p[i + 1])); }
+        void Arc(Vector2 c, float r, float from, float to)
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                float a0 = Mathf.Deg2Rad * Mathf.Lerp(from, to, i / 16f), a1 = Mathf.Deg2Rad * Mathf.Lerp(from, to, (i + 1) / 16f);
+                s.Segments.Add((c + r * new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)), c + r * new Vector2(Mathf.Cos(a1), Mathf.Sin(a1))));
+            }
+        }
+        void Head(Vector2 tip, Vector2 dir) // filled arrowhead pointing along dir
+        {
+            dir.Normalize();
+            var n = new Vector2(-dir.y, dir.x);
+            heads.Add(new[] { tip, tip - dir * .2f + n * .14f, tip - dir * .2f - n * .14f });
+        }
+
+        switch (kind)
+        {
+            case 0: // ↶ : arrow pointing left, looping round on the right
+                Line(new(.3f, .66f), new(.58f, .66f));
+                Arc(new(.58f, .45f), .21f, 90, -90);
+                Line(new(.58f, .24f), new(.3f, .24f));
+                Head(new(.1f, .66f), Vector2.left);
+                break;
+            case 1: // ⇄ crossed : two arrows swapping lanes
+                Line(new(.12f, .28f), new(.32f, .28f), new(.6f, .72f), new(.72f, .72f));
+                Line(new(.12f, .72f), new(.32f, .72f), new(.6f, .28f), new(.72f, .28f));
+                Head(new(.92f, .72f), Vector2.right);
+                Head(new(.92f, .28f), Vector2.right);
+                break;
+            default: // stopwatch
+                Arc(new(.5f, .42f), .32f, 0, 360);
+                Line(new(.5f, .42f), new(.5f, .6f));
+                Line(new(.5f, .42f), new(.63f, .35f));
+                Line(new(.5f, .74f), new(.5f, .84f));
+                Line(new(.4f, .88f), new(.6f, .88f));
+                break;
+        }
+
+        const float half = .055f; // half the pen width
+        var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                var p = new Vector2((x + .5f) / size, (y + .5f) / size);
+                float a = Mathf.Clamp01((half - s.Distance(p)) * size + .5f);
+                if (heads.Any(h => Inside(h, p))) a = 1;
+                t.SetPixel(x, y, new Color(1, 1, 1, a));
+            }
+        t.Apply();
+        return t;
+    }
+
     public static Texture2D Rounded(int size, int radius)
     {
         var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
