@@ -1,0 +1,208 @@
+<title>Shelf Sort</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap">
+<style>
+/* Layout: one phone-width column — HUD + timer on top, shelves grid in the middle, bonus bar at the bottom.
+   Single committed look (bright supermarket wall), no dark variant. */
+:root{
+  --wall:#d6edf1; --wall2:#b9dde6; --wood:#a26f47; --wood-dark:#6f4a2e;
+  --ink:#24304a; --tag:#e9473f; --gold:#ffc23d; --card:#ffffff;
+  --display:'Baloo 2','Trebuchet MS',system-ui,sans-serif;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:linear-gradient(var(--wall),var(--wall2));color:var(--ink);font-family:var(--display);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:12px;box-sizing:border-box;user-select:none;-webkit-user-select:none;overflow:hidden}
+#app{max-width:440px;margin:0 auto;height:100%;display:flex;flex-direction:column;gap:10px}
+.hud{display:flex;align-items:center;gap:10px}
+#lvl{font-weight:800;font-size:22px}
+#hard{background:var(--tag);color:#fff;border-radius:6px;padding:0 8px;font-size:13px;font-weight:800;letter-spacing:.06em}
+#coins{margin-left:auto;font-weight:700;font-size:17px}
+.icon-btn{border:0;background:var(--card);color:var(--ink);border-radius:10px;width:36px;height:36px;font-size:18px;cursor:pointer}
+.timer{display:flex;align-items:center;gap:8px}
+.bar{flex:1;height:14px;background:rgba(36,48,74,.15);border-radius:7px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--gold);transition:width .1s linear}
+.bar.low i{background:var(--tag)}
+#secs{font-variant-numeric:tabular-nums;font-weight:800;min-width:3ch;text-align:right}
+#board{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:16px 14px;align-content:center;touch-action:none}
+.shelf{position:relative;padding-bottom:12px}
+.back{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;height:24px;font-size:18px;filter:grayscale(1);opacity:.45}
+.front{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.slot{aspect-ratio:1;display:grid;place-items:center;font-size:clamp(26px,9vw,38px);border-radius:10px;background:rgba(255,255,255,.35)}
+.slot.item{cursor:grab}
+.slot.drag{opacity:.2}
+.slot.hover{background:rgba(255,194,61,.65)}
+.slot.pop{animation:pop .3s ease-in forwards}
+@keyframes pop{40%{transform:scale(1.35)}100%{transform:scale(0);opacity:0}}
+.plank{position:absolute;left:-4px;right:-4px;bottom:0;height:10px;background:var(--wood);border-radius:3px;box-shadow:0 4px 0 var(--wood-dark)}
+.more{position:absolute;right:0;top:2px;font-size:11px;font-weight:800;background:var(--ink);color:#fff;border-radius:8px;padding:0 6px}
+.ghost{position:fixed;pointer-events:none;font-size:48px;transform:translate(-50%,-70%) scale(1.15);z-index:10;filter:drop-shadow(0 6px 6px rgba(0,0,0,.25))}
+.bonus{display:flex;gap:10px;justify-content:center;padding-bottom:4px}
+.bonus button{position:relative;border:0;border-radius:14px;background:var(--card);color:var(--ink);font:700 14px var(--display);
+  padding:8px 14px;display:grid;justify-items:center;cursor:pointer;box-shadow:0 4px 0 rgba(36,48,74,.18)}
+.bonus button span{font-size:22px;line-height:1.1}
+.bonus button:disabled{opacity:.4;cursor:default}
+.bonus button b{position:absolute;top:-6px;right:-6px;background:var(--tag);color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:grid;place-items:center}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+#toast{position:fixed;left:50%;top:30%;transform:translateX(-50%);background:var(--gold);color:var(--ink);font-weight:800;font-size:22px;
+  padding:6px 18px;border-radius:12px;pointer-events:none;opacity:0;transition:opacity .2s}
+#toast.show{opacity:1}
+#ov{position:fixed;inset:0;background:rgba(36,48,74,.55);display:grid;place-items:center;padding:16px;z-index:20}
+.card{background:var(--card);border-radius:18px;padding:24px;text-align:center;max-width:320px;width:100%;display:grid;gap:12px}
+.card h2{margin:0;font-size:28px;line-height:1.1;text-wrap:balance}
+.card p{margin:0}
+.card button{border:0;border-radius:12px;padding:12px;font:800 17px var(--display);cursor:pointer;background:var(--gold);color:var(--ink)}
+.card button.alt{background:var(--wall);font-weight:700}
+@media (prefers-reduced-motion:reduce){.slot.pop{animation:none;opacity:0}.bar i{transition:none}}
+</style>
+
+<div id="app">
+  <div class="hud">
+    <span id="lvl">Niveau 1</span><span id="hard" hidden>HARD</span>
+    <span id="coins"></span>
+    <button class="icon-btn" id="restart" aria-label="Recommencer le niveau">↺</button>
+  </div>
+  <div class="timer"><div class="bar" id="bar"><i id="fill"></i></div><span id="secs"></span></div>
+  <div id="board"></div>
+  <div class="bonus">
+    <button id="b-undo"><span>↩️</span>Annuler<b></b></button>
+    <button id="b-shuffle"><span>🔀</span>Mélanger<b></b></button>
+    <button id="b-time"><span>⏱️</span>+15 s<b></b></button>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="ov" hidden><div class="card" id="card"></div></div>
+
+<script>
+const ITEMS=['🥤','🍩','🍟','🍕','🍔','🌭','🍪','🧁','🍫','🍬','🍦','🍉'];
+const $=s=>document.querySelector(s);
+let lvl=1,coins=0;
+try{lvl=+localStorage.getItem('ss_lvl')||1;coins=+localStorage.getItem('ss_coins')||0}catch(e){}
+const save=()=>{try{localStorage.setItem('ss_lvl',lvl);localStorage.setItem('ss_coins',coins)}catch(e){}};
+let S,time,total,hard,busy,over,history,uses,adUsed,combo,lastMatch,tick,drag=null;
+
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+const chunk=(a,n)=>Array.from({length:Math.ceil(a.length/n)},(_,i)=>a.slice(i*n,i*n+n));
+const triple=r=>r[0]&&r[0]===r[1]&&r[1]===r[2];
+const buzz=ms=>{try{navigator.vibrate&&navigator.vibrate(ms)}catch(e){}};
+
+// A shelf is a list of rows of 3; row 0 is the front (playable), the rest are hidden behind it.
+function gen(n){
+  if(n===1)return{time:60,hard:false,shelves:[[['🥤','🍩','🥤']],[['🍟','🥤','🍩']],[['🍩','🍟',null]],[['🍟',null,null]]]};
+  const isHard=n%5===0, T=Math.min(3+Math.floor(n*.8)+(isHard?2:0),ITEMS.length);
+  const L=n<3?1:n<9?2:3, E=isHard?2:n<4?4:3, S=Math.ceil((3*T+E)/(3*L)), F=S*3;
+  // ponytail: random deal, not guaranteed solvable (shuffle/undo cover it); add a reverse-generator if playtests hit dead levels
+  for(;;){
+    const items=shuffle(shuffle(ITEMS.slice()).slice(0,T).flatMap(x=>[x,x,x]));
+    const nf=Math.min(items.length,F-E);
+    const front=chunk(shuffle([...items.slice(0,nf),...Array(F-nf).fill(null)]),3);
+    if(front.some(triple))continue;
+    const rest=items.slice(nf), back=chunk(shuffle([...rest,...Array(F*(L-1)-rest.length).fill(null)]),3);
+    return{time:Math.round((25+T*7)*(isHard?.85:1)),hard:isHard,
+      shelves:front.map((f,i)=>[f,...Array.from({length:L-1},(_,k)=>back[k*S+i])])};
+  }
+}
+
+function start(){
+  const g=gen(lvl);S=g.shelves;time=total=g.time;hard=g.hard;
+  busy=over=adUsed=false;history=[];uses={undo:1,shuffle:1,time:1};combo=0;lastMatch=0;
+  clearInterval(tick);
+  tick=setInterval(()=>{if(busy||over)return;time=Math.max(0,time-.1);hud();if(!time)lose('Temps écoulé !')},100);
+  $('#ov').hidden=true;render();
+}
+
+function hud(){
+  $('#fill').style.width=(100*time/total)+'%';
+  $('#bar').classList.toggle('low',time<10);
+  $('#secs').textContent=Math.ceil(time);
+}
+
+function render(){
+  $('#lvl').textContent='Niveau '+lvl;$('#hard').hidden=!hard;$('#coins').textContent='🪙 '+coins;
+  $('#board').innerHTML=S.map((L,s)=>`<div class="shelf">
+    <div class="back">${(L[1]||[]).map(x=>`<span>${x||''}</span>`).join('')}</div>
+    <div class="front">${L[0].map((x,i)=>`<div class="slot${x?' item':''}" data-s="${s}" data-i="${i}">${x||''}</div>`).join('')}</div>
+    <div class="plank"></div>${L.length>2?`<span class="more">+${L.length-2}</span>`:''}</div>`).join('');
+  for(const k in uses){const b=$('#b-'+k);b.disabled=!uses[k]||(k==='undo'&&!history.length);b.querySelector('b').textContent=uses[k]}
+  hud();
+}
+
+function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),900)}
+
+function move(a,i,b,j){
+  history.push(JSON.stringify(S));
+  S[b][0][j]=S[a][0][i];S[a][0][i]=null;buzz(8);resolve();
+}
+
+function resolve(){
+  S.forEach(L=>{while(L.length>1&&L[0].every(x=>!x))L.shift()});
+  const hits=S.map((L,s)=>triple(L[0])?s:-1).filter(s=>s>=0);
+  render();
+  if(hits.length){
+    busy=true;buzz(30);
+    hits.forEach(s=>document.querySelectorAll(`.slot[data-s="${s}"]`).forEach(el=>el.classList.add('pop')));
+    const now=Date.now();combo=now-lastMatch<4000?combo+1:1;lastMatch=now;
+    if(combo>1){time=Math.min(total,time+2);toast('Combo x'+combo+' · +2 s')}
+    setTimeout(()=>{hits.forEach(s=>S[s][0]=[null,null,null]);busy=false;resolve()},300);
+    return;
+  }
+  if(S.every(L=>L.every(r=>r.every(x=>!x))))return win();
+  if(S.every(L=>L[0].every(x=>x)))lose('Plus de place !');
+}
+
+function doShuffle(){
+  const cells=S.flatMap((L,s)=>L[0].map((_,i)=>[s,i]));
+  const vals=shuffle(cells.map(([s,i])=>S[s][0][i]));
+  cells.forEach(([s,i],k)=>S[s][0][i]=vals[k]);
+}
+
+function overlay(html){$('#card').innerHTML=html;$('#ov').hidden=false;$('#card button')?.focus()}
+
+function win(){
+  over=true;const gain=hard?25:10;coins+=gain;lvl++;save();
+  overlay(`<h2>Niveau ${lvl-1} réussi ! 🎉</h2><p>+${gain} 🪙 · ${Math.ceil(time)} s restantes</p><button id="next">Niveau suivant</button>`);
+  $('#next').onclick=start;
+}
+
+function lose(msg){
+  if(over)return;over=true;buzz([40,60,40]);
+  const timeout=!time;
+  overlay(`<h2>${msg}</h2>
+    ${adUsed?'':`<button id="ad">📺 Regarder une pub<br><small>${timeout?'+15 secondes':'Annuler 2 coups'}</small></button>`}
+    <button class="alt" id="retry">Recommencer</button>`);
+  $('#retry').onclick=start;
+  if(!adUsed)$('#ad').onclick=()=>{
+    adUsed=true;over=false;$('#ov').hidden=true;
+    if(timeout){time=15;total=Math.max(total,15)}
+    else{const h=history.splice(-2);if(h.length)S=JSON.parse(h[0])}
+    render();
+  };
+}
+
+$('#b-undo').onclick=()=>{if(busy||over||!history.length)return;uses.undo--;S=JSON.parse(history.pop());render()};
+$('#b-shuffle').onclick=()=>{if(busy||over)return;uses.shuffle--;history.push(JSON.stringify(S));doShuffle();resolve()};
+$('#b-time').onclick=()=>{if(busy||over)return;uses.time--;time+=15;total=Math.max(total,time);render()};
+$('#restart').onclick=start;
+
+// Drag & drop: press an item, drag it, release over an empty slot.
+const targetAt=e=>{const el=document.elementFromPoint(e.clientX,e.clientY)?.closest('.slot');return el&&!el.classList.contains('item')?el:null};
+const place=e=>{drag.ghost.style.left=e.clientX+'px';drag.ghost.style.top=e.clientY+'px'};
+$('#board').addEventListener('pointerdown',e=>{
+  const el=e.target.closest('.slot.item');if(!el||busy||over)return;e.preventDefault();
+  drag={s:+el.dataset.s,i:+el.dataset.i,el,ghost:Object.assign(document.createElement('div'),{className:'ghost',textContent:el.textContent})};
+  document.body.append(drag.ghost);el.classList.add('drag');place(e);
+});
+addEventListener('pointermove',e=>{
+  if(!drag)return;place(e);
+  document.querySelectorAll('.slot.hover').forEach(x=>x.classList.remove('hover'));
+  targetAt(e)?.classList.add('hover');
+});
+const drop=e=>{
+  if(!drag)return;const d=drag,t=e.type==='pointerup'&&targetAt(e);drag=null;d.ghost.remove();
+  if(t&&!busy&&!over)move(d.s,d.i,+t.dataset.s,+t.dataset.i);else render();
+};
+addEventListener('pointerup',drop);addEventListener('pointercancel',drop);
+
+start();
+</script>
