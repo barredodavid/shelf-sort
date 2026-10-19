@@ -42,8 +42,8 @@ public static partial class Products
     }
 
     // A level on the map: a little shop facing the camera (-Z), striped awning over its window and door, and an
-    // empty sign board on the roof (SignY, z = -.47) where the map writes the level number. open = false: shutters down.
-    public const float SignY = 1.4f;
+    // empty sign board on the roof (SignY(w), z = -.47) where the map writes the level number. open = false: shutters down.
+    public static float SignY(int w) => w == 0 ? 1.75f : 1.4f; // above the Paris mansard
 
     // Each country's shop: Paris shop with a zinc roof, Italian one in ochre under terracotta tiles, Japanese one in
     // dark wood with a paper window, a noren over the door and a red lantern, American diner with a chrome stripe.
@@ -62,18 +62,33 @@ public static partial class Products
             Part(root, Cube, roof, new(0, 1.1f, -.28f), new(-24, 0, 0), new(1.56f, .08f, .7f));
             Part(root, Cube, roof, new(0, 1.1f, .28f), new(24, 0, 0), new(1.56f, .08f, .7f));
         }
+        else if (w == 0) // Paris: slate mansard roof with two dormers
+        {
+            Part(root, Prism(new(-.7f, .98f, -.56f), new(-.7f, .98f, .56f), new(-.7f, 1.48f, 0), new(1.4f, 0, 0)), roof, Vector3.zero);
+            foreach (float x in new[] { -.32f, .32f })
+            {
+                Part(root, Cube, Plain(C("#fbf3e4"), .3f), new(x, 1.16f, -.3f), scale: new(.22f, .24f, .2f));
+                Part(root, Cube, Plain(C("#4a5a78"), .8f), new(x, 1.15f, -.405f), scale: new(.12f, .14f, .01f));
+            }
+        }
         else Part(root, Cube, roof, new(0, 1.04f, 0), scale: new(1.44f, .14f, 1.12f));
         if (w == 3 && open) Part(root, Cube, Plain(C("#e8423c"), .7f), new(0, .3f, 0), scale: new(1.32f, .1f, 1.02f)); // diner stripe
 
         // sign board on posts
-        Part(root, Cube, roof, new(-.4f, 1.16f, -.42f), scale: new(.06f, .2f, .06f));
-        Part(root, Cube, roof, new(.4f, 1.16f, -.42f), scale: new(.06f, .2f, .06f));
-        Part(root, Cube, Plain(C("#fbf8f0"), .4f), new(0, SignY, -.45f), scale: new(1.1f, .5f, .06f));
+        Part(root, Cube, roof, new(-.4f, SignY(w) - .24f, -.42f), scale: new(.06f, .2f, .06f));
+        Part(root, Cube, roof, new(.4f, SignY(w) - .24f, -.42f), scale: new(.06f, .2f, .06f));
+        Part(root, Cube, Plain(C("#fbf8f0"), .4f), new(0, SignY(w), -.45f), scale: new(1.1f, .5f, .06f));
 
         // window and door, or rolled-down shutters while the level is locked
         var glass = w == 2 ? C("#f7f1e1") : C("#9fd8ff"); // paper screen in Japan
         Part(root, Cube, Plain(open ? glass : C("#9aa1ad"), open ? .9f : .3f), new(-.22f, .5f, -.505f), scale: new(.6f, .42f, .02f));
         Part(root, Cube, Plain(open ? C("#8a5a35") : C("#9aa1ad"), .3f), new(.37f, .38f, -.505f), scale: new(.3f, .6f, .02f));
+        if (w == 0 && open) // window box of red geraniums
+        {
+            Part(root, Cube, Plain(C("#8a5a35"), .2f), new(-.22f, .26f, -.55f), scale: new(.62f, .08f, .1f));
+            for (int k = 0; k < 5; k++)
+                Part(root, Sphere, Plain(k % 2 == 0 ? C("#e3263a") : C("#3e9b3a"), .3f), new(-.46f + k * .12f, .32f, -.56f), scale: Vector3.one * .1f);
+        }
         if (w == 2 && open)
         {
             Part(root, Cube, Plain(awning, .3f), new(.37f, .6f, -.52f), scale: new(.34f, .18f, .02f)); // noren curtain
@@ -91,12 +106,27 @@ public static partial class Products
         var root = new GameObject("Landmark");
         switch (w)
         {
-            case 0: // Eiffel tower: square tapering tower (a 4-sided lathe), two platforms
+            case 0: // Eiffel tower: four splayed legs up to the first floor, a narrower stage, a slim top and a spire
             {
-                var iron = Plain(C("#8a6a4a"), .4f);
-                Spin(root, P(0, 0, 1.2f, 0, .75f, .7f, .5f, 1.3f, .28f, 2.2f, .14f, 3.1f, .06f, 3.7f, 0, 3.9f), iron, euler: new(0, 45, 0), segments: 4);
-                Part(root, Cube, iron, new(0, .72f, 0), new(0, 0, 0), new(1.2f, .1f, 1.2f));
-                Part(root, Cube, iron, new(0, 1.32f, 0), new(0, 0, 0), new(.8f, .08f, .8f));
+                var iron = Paint((u, v) => Mathf.Repeat(u * 4 + v * 8, 1) < .18f || Mathf.Repeat(u * 4 - v * 8, 1) < .18f ? C("#5a4330") : C("#9a7650"), .4f);
+                void Beam(Vector3 a, Vector3 b, float th) =>
+                    Part(root, Cube, iron, (a + b) / 2, Quaternion.FromToRotation(Vector3.up, b - a).eulerAngles, new(th, (b - a).magnitude, th));
+                foreach (var (sx, sz) in new[] { (-1, -1), (1, -1), (1, 1), (-1, 1) })
+                {
+                    Beam(new(sx * 1.05f, 0, sz * 1.05f), new(sx * .45f, 1.05f, sz * .45f), .3f);
+                    Beam(new(sx * .45f, 1.15f, sz * .45f), new(sx * .2f, 2.15f, sz * .2f), .2f);
+                    Beam(new(sx * .2f, 2.2f, sz * .2f), new(sx * .05f, 3.5f, sz * .05f), .12f);
+                }
+                foreach (int s in new[] { -1, 1 }) // arched girders between the legs, front/back and sides
+                {
+                    Beam(new(-.75f, .62f, s * .78f), new(.75f, .62f, s * .78f), .1f);
+                    Beam(new(s * .78f, .62f, -.75f), new(s * .78f, .62f, .75f), .1f);
+                }
+                var deck = Plain(C("#6e5236"), .3f);
+                Part(root, Cube, deck, new(0, 1.1f, 0), scale: new(1.25f, .14f, 1.25f));
+                Part(root, Cube, deck, new(0, 2.18f, 0), scale: new(.62f, .1f, .62f));
+                Part(root, Cube, deck, new(0, 3.55f, 0), scale: new(.18f, .14f, .18f));
+                Part(root, Cylinder, deck, new(0, 3.85f, 0), scale: new(.04f, .2f, .04f));
                 break;
             }
             case 1: // Colosseum: ring wall with three tiers of arches
@@ -166,7 +196,7 @@ public static partial class Products
     }
 
     // one piece of scenery for country w; r (0..1) picks the variant and its size.
-    // France: plane trees and green lamp posts; Italy: cypresses and olive bushes; Japan: cherry trees and stone
+    // France: plane trees, lamp posts, Morris columns, café tables and flower beds; Italy: cypresses and olive bushes; Japan: cherry trees and stone
     // lanterns; USA: palm trees and cacti.
     public static GameObject Decor(int w, float r)
     {
@@ -186,8 +216,35 @@ public static partial class Products
                 Part(root, Cube, Plain(C("#2f4a3a"), .5f), new(0, 1.42f, 0), scale: new(.22f, .06f, .22f));
                 Part(root, Sphere, Plain(C("#fff2b0"), .9f), new(0, 1.55f, 0), scale: Vector3.one * .22f);
                 break;
-            case 0:
-                RoundTree(C("#5bb04a"));
+            case 0 when r < .4f: // Morris column, dark green with a little dome
+            {
+                var green = Plain(C("#2f4a3a"), .5f);
+                Part(root, Cylinder, Paint((u, v) => Mathf.Repeat(u * 5, 1) < .5f ? C("#f2e6c8") : C("#e8b25a"), .3f), new(0, .6f, 0), scale: new(.34f, .45f, .34f));
+                Part(root, Cylinder, green, new(0, .1f, 0), scale: new(.4f, .1f, .4f));
+                Part(root, Cylinder, green, new(0, 1.08f, 0), scale: new(.42f, .04f, .42f));
+                Spin(root, Ball(.2f, 1.1f, .8f), green);
+                break;
+            }
+            case 0 when r < .52f: // café table under a red and white umbrella, two chairs
+            {
+                var metal = Plain(C("#2a2d35"), .5f);
+                Part(root, Cylinder, metal, new(0, .3f, 0), scale: new(.04f, .3f, .04f));
+                Part(root, Cylinder, Plain(C("#fbf8f0"), .4f), new(0, .6f, 0), scale: new(.5f, .02f, .5f));
+                Part(root, Cylinder, metal, new(0, .95f, 0), scale: new(.03f, .35f, .03f));
+                Spin(root, P(0, 1.2f, .55f, 1.2f, 0, 1.42f), Paint((u, v) => (int)(u * 8) % 2 == 0 ? C("#e8423c") : Color.white, .4f));
+                foreach (float x in new[] { -.4f, .4f })
+                    Part(root, Cube, Plain(C("#c79a5a"), .3f), new(x, .25f, 0), scale: new(.22f, .5f, .22f));
+                break;
+            }
+            case 0 when r < .62f: // round flower bed
+                Part(root, Cylinder, Plain(C("#cfc6b4"), .2f), new(0, .08f, 0), scale: new(.9f, .08f, .9f));
+                Part(root, Sphere, Paint((u, v) => Dot(u, v, 14, 8, .5f, .35f, 2, out float k) ? (k < .25f ? C("#e3263a") : C("#f7b6cf")) : C("#4fa83d"), .3f),
+                    new(0, .2f, 0), scale: new(.8f, .3f, .8f));
+                break;
+            case 0: // plane tree: pale mottled bark
+                Part(root, Cylinder, Paint((u, v) => Mathf.PerlinNoise(u * 8, v * 8) > .55f ? C("#d9cfb8") : C("#9a8a6a"), .2f), new(0, .3f * s, 0), scale: new(.15f, .3f * s, .15f));
+                Part(root, Sphere, Plain(C("#6cbb52"), .25f), new(0, .85f * s, 0), scale: new Vector3(1f, .85f, 1f) * s);
+                Part(root, Sphere, Plain(C("#82c964"), .25f), new(-.12f * s, 1.05f * s, -.12f * s), scale: new Vector3(.55f, .45f, .55f) * s);
                 break;
             case 1 when r < .4f: // olive bush
                 Part(root, Sphere, Plain(C("#8fa36a"), .2f), new(0, .3f, 0), scale: new Vector3(.8f, .55f, .8f) * s);

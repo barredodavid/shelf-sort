@@ -96,6 +96,15 @@ public partial class Game
         var pts = new List<Vector3>();
         for (float t = -3; t <= TotalLevels + .5f; t += .05f) pts.Add(MapPos(t));
         Vector3 Up(float y) => new(0, y, 0);
+        // sidewalks along the road, in each country's paving: Paris stone, terracotta, gravel, concrete
+        string[] paving = { "#e6dccb", "#e8c9a4", "#d3cec2", "#d9d9d6" };
+        for (int w = 0; w < Worlds.Length; w++)
+        {
+            float t0 = w == 0 ? -3 : GateT(w), t1 = w == Worlds.Length - 1 ? TotalLevels + .5f : GateT(w + 1);
+            var side = new List<Vector3>();
+            for (float t = t0; t <= t1 + .01f; t += .05f) side.Add(MapPos(t));
+            Products.Place(mapRoot, Products.Ribbon(side, 2.7f), C2(paving[w]), Up(.005f), smooth: .1f);
+        }
         Products.Place(mapRoot, Products.Ribbon(pts, 1.35f), C2("#fbf8f0"), Up(.01f));
         Products.Place(mapRoot, Products.Ribbon(pts, 1.1f), C2("#5a5f6c"), Up(.02f), smooth: .15f);
         Products.Place(mapRoot, Products.Ribbon(pts, .09f, i => i % 6 < 3), Color.white, Up(.03f));
@@ -151,7 +160,7 @@ public partial class Game
         }
 
         // decor on both sides, kept clear of the road
-        for (float t = -4; t < TotalLevels + 6; t += .3f)
+        for (float t = -4; t < TotalLevels + 6; t += .45f)
             for (int side = 0; side < 2; side++)
             {
                 int k = Mathf.RoundToInt(t * 10);
@@ -339,7 +348,7 @@ public partial class Game
         // numbers on the shops' signs, "DUR" above hard ones, stars under finished ones
         for (int g = 0; g < TotalLevels; g++)
         {
-            var c = ToGui(PadPos(g) + new Vector3(0, Products.SignY, -.48f)); // the shop's sign
+            var c = ToGui(PadPos(g) + new Vector3(0, Products.SignY(g / LevelsPerWorld), -.48f)); // the shop's sign
             if (c.y < -150 || c.y > H + 150) continue;
             int w = g / LevelsPerWorld, l = g % LevelsPerWorld;
             bool open = Reachable(g), tough = (l + 1) % 5 == 0;
@@ -371,7 +380,7 @@ public partial class Game
         // "you are here": a bouncing tag over the next level to play, and a big button that drives there and starts it
         if (nextLevel >= 0)
         {
-            var c = ToGui(PadPos(nextLevel) + new Vector3(0, Products.SignY, -.48f));
+            var c = ToGui(PadPos(nextLevel) + new Vector3(0, Products.SignY(nextLevel / LevelsPerWorld), -.48f));
             float hop = 14 * Mathf.Abs(Mathf.Sin(Time.time * 4));
             var tag = new Rect(c.x - 85, c.y - ((nextLevel % LevelsPerWorld + 1) % 5 == 0 ? 150 : 110) - hop, 170, 70);
             Panel(new Rect(tag.x, tag.y + 8, tag.width, tag.height), Darker(Gold));

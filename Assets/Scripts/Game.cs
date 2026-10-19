@@ -786,7 +786,7 @@ public partial class Game : MonoBehaviour
     // ponytail: skipped when the board is too tall (3+ rows); shrink it instead if those levels look bare
     void StoreFront(float from, float to)
     {
-        const float h = 270, sw = 94, awningH = 60;
+        const float h = 270, awningH = 60;
         if (to - from < h - 10) return; // FitCamera reserves exactly h, allow rounding
         float y = from + (to - from - h) / 2;
 
@@ -796,17 +796,32 @@ public partial class Game : MonoBehaviour
         Label(new Rect(sign.x, sign.y + 4, sign.width, 90), "SHELF SORT", 80, Red, true);
         Label(new Rect(sign.x, sign.y + 88, sign.width, 40), $"{Worlds[world].name.ToUpper()} · OUVERT 24/24", 32, Ink);
 
-        Awning((1080 - 10 * sw) / 2, sign.yMax + 25, 10, sw, awningH);
+        // full-width awning hung from a wooden rail
+        float ay = sign.yMax + 25;
+        Awning((1080 - 12 * 98) / 2f, ay, 12, 98, awningH);
+        GUI.color = new Color(.42f, .28f, .18f);
+        GUI.DrawTexture(new Rect(0, ay - 12, 1080, 20), Texture2D.whiteTexture);
+        GUI.color = new Color(.6f, .42f, .28f);
+        GUI.DrawTexture(new Rect(0, ay - 12, 1080, 6), Texture2D.whiteTexture);
+        GUI.color = Color.white;
     }
 
     // n stripes of width sw alternating awning color / white, each ending in a half-circle scallop
+    // with some relief: a soft shadow on the wall, a darker rim under each scallop, a shaded fold on each stripe
     void Awning(float x0, float y, int n, float sw, float h)
     {
+        GUI.color = new Color(0, 0, 0, .12f);
+        for (int i = 0; i < n; i++) GUI.DrawTexture(new Rect(x0 + i * sw + 4, y + h - sw / 2 + 16, sw - 8, sw), circle);
         for (int i = 0; i < n; i++)
         {
-            GUI.color = i % 2 == 0 ? AwningC : Color.white;
+            var c = i % 2 == 0 ? AwningC : Color.white;
+            GUI.color = Darker(c);
+            GUI.DrawTexture(new Rect(x0 + i * sw, y + h - sw / 2 + 7, sw, sw), circle);
+            GUI.color = c;
             GUI.DrawTexture(new Rect(x0 + i * sw, y, sw, h), Texture2D.whiteTexture);
             GUI.DrawTexture(new Rect(x0 + i * sw, y + h - sw / 2, sw, sw), circle);
+            GUI.color = new Color(0, 0, 0, .07f);
+            GUI.DrawTexture(new Rect(x0 + i * sw + sw * .65f, y, sw * .35f, h), Texture2D.whiteTexture);
         }
         GUI.color = Color.white;
     }

@@ -30,14 +30,14 @@ public static partial class Products
         0 => Pizza(),
         1 => Tomate(),
         2 => Cornet(),
-        3 => Raisin(),
+        3 => Tiramisu(),
         4 => Pasta(),
-        5 => Bottle("HUILE", liquid: C("#b5bd2c"), label: C("#1f5e2e"), cap: C("#d9b44a"), fill: .85f),
-        6 => Citron(),
-        7 => Aubergine(),
-        8 => Mozzarella(),
-        9 => Pasteque(),
-        10 => Champignon(),
+        5 => Bottle("OLIO", liquid: C("#5a6e1c"), label: C("#1f4a2a"), cap: C("#d9b44a"), fill: .95f),
+        6 => Cannolo(),
+        7 => Parmesan(),
+        8 => Jar("PESTO", content: C("#4f8a2a"), lid: C("#d9b44a"), label: C("#fbf3e4"), ink: C("#2f6b2a")),
+        9 => Salami(),
+        10 => Panettone(),
         _ => Espresso(),
     };
 
@@ -142,20 +142,21 @@ public static partial class Products
     // one smooth tube bent into a crescent: fat in the middle, pointed tips, pinched grooves between the rolls
     static GameObject Croissant()
     {
+        // fat middle, thin horns curling round towards the player, deep grooves between seven rolls
         var root = new GameObject("Croissant");
-        float Radius(float t) => .21f * Mathf.Pow(Mathf.Abs(Mathf.Sin(Mathf.PI * t)), .55f) * (1 - .16f * Mathf.Pow(Mathf.Abs(Mathf.Cos(5 * Mathf.PI * t)), 6));
+        float Radius(float t) => .26f * Mathf.Pow(Mathf.Abs(Mathf.Sin(Mathf.PI * t)), .6f) * (1 - .22f * Mathf.Pow(Mathf.Abs(Mathf.Cos(7 * Mathf.PI * t)), 6));
         Vector3 Center(float t)
         {
-            float a = Mathf.Lerp(-80, 80, t) * Mathf.Deg2Rad;
-            return new Vector3(Mathf.Sin(a) * .42f, Radius(t) * .8f, -Mathf.Cos(a) * .42f + .25f);
+            float a = Mathf.Lerp(-105, 105, t) * Mathf.Deg2Rad;
+            return new Vector3(Mathf.Sin(a) * .4f, Radius(t) * .85f, Mathf.Cos(a) * .4f - .2f);
         }
         var mat = Paint((u, v) =>
         {
-            float groove = Mathf.Pow(Mathf.Abs(Mathf.Cos(5 * Mathf.PI * v)), 6);
-            float top = .85f + .25f * Mathf.Sin(2 * Mathf.PI * u); // u = .25 is the top: lighter, more baked
-            return Color.Lerp(C("#e3a04a"), C("#9c521c"), groove * .8f) * top;
-        }, .5f);
-        Part(root, Sweep(Center, Radius, .8f), mat, Vector3.zero);
+            float groove = Mathf.Pow(Mathf.Abs(Mathf.Cos(7 * Mathf.PI * v)), 6);
+            float top = .8f + .3f * Mathf.Sin(2 * Mathf.PI * u); // u = .25 is the top: lighter, more baked
+            return Color.Lerp(Color.Lerp(C("#f0b35a"), C("#d98a32"), Mathf.PerlinNoise(u * 12, v * 30)), C("#8f4a18"), groove * .85f) * top;
+        }, .55f);
+        Part(Tilted(root, new(-25, 0, 0)), Sweep(Center, Radius, .85f), mat, Vector3.zero);
         return root;
     }
 
@@ -457,25 +458,36 @@ public static partial class Products
         return root;
     }
 
+    // pizza on a wooden peel, stood up and leaning back like on a display stand so the toppings face the player:
+    // raised golden crust, a line of sauce, cheese with browned spots, shiny pepperoni, olives and basil
     static GameObject Pizza()
     {
-        // stood up on its edge, leaning back like on a display stand, so the toppings face the player
         var whole = new GameObject("Pizza");
-        var root = Tilted(whole, new(-62, 0, 0));
-        Spin(root, P(0, 0, .46f, 0, .48f, .04f, .45f, .08f, .4f, .07f, 0, .06f), Plain(C("#e0a050"), .3f));
-        Spin(root, P(0, .05f, .41f, .05f, .41f, .075f, 0, .075f), Plain(C("#ffd257"), .4f));
-        var pep = Plain(C("#c0392b"), .5f);
-        Part(root, Prim(PrimitiveType.Cylinder), pep, new(0, .08f, 0), scale: new(.12f, .01f, .12f));
-        for (int i = 0; i < 6; i++)
+        var root = Tilted(whole, new(-58, 0, 0));
+        var wood = Plain(C("#c58a45"), .25f);
+        Spin(root, P(0, -.04f, .52f, -.04f, .52f, 0, 0, 0), wood); // the peel
+        Part(root, Cube, wood, new(0, -.02f, .66f), scale: new(.14f, .04f, .36f));
+        Spin(root, P(0, 0, .44f, 0, .47f, .03f, .47f, .07f, .43f, .1f, .39f, .075f, 0, .07f),
+            Paint((u, v) => Color.Lerp(C("#ecb862"), C("#b8722e"), Mathf.PerlinNoise(u * 24, v * 8) * .7f), .35f));
+        Part(root, Cylinder, Plain(C("#d9452b"), .5f), new(0, .075f, 0), scale: new(.84f, .008f, .84f));
+        Part(root, Cylinder, Paint((u, v) =>
         {
-            float a = i * Mathf.PI / 3;
-            Part(root, Prim(PrimitiveType.Cylinder), pep, new(Mathf.Cos(a) * .24f, .08f, Mathf.Sin(a) * .24f), scale: new(.12f, .01f, .12f));
+            float n = Mathf.PerlinNoise(u * 9, v * 9);
+            return n > .66f ? C("#e3923a") : n < .25f ? C("#fff0b0") : C("#ffd257"); // browned and melted spots
+        }, .45f), new(0, .08f, 0), scale: new(.76f, .008f, .76f));
+        var pep = Plain(C("#b8282e"), .75f);
+        var olive = Plain(C("#2a2a2e"), .6f);
+        for (int i = 0; i < 7; i++)
+        {
+            float a = i * 2 * Mathf.PI / 6, r = i == 6 ? 0 : .23f;
+            Spin(root, P(0, 0, .075f, 0, .07f, .014f, 0, .02f), pep, new(Mathf.Cos(a) * r, .09f, Mathf.Sin(a) * r));
+            if (i < 6) Spin(root, Torus(.028f, .014f), olive, new(Mathf.Cos(a + .5f) * .3f, .09f, Mathf.Sin(a + .5f) * .3f));
         }
         var basil = Plain(C("#3e9b3a"), .4f);
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 3; i++)
         {
-            float a = i * Mathf.PI / 2 + .5f;
-            Part(root, Prim(PrimitiveType.Sphere), basil, new(Mathf.Cos(a) * .14f, .08f, Mathf.Sin(a) * .14f), new(0, i * 40, 0), new(.08f, .015f, .05f));
+            float a = i * 2.1f + 1;
+            Part(root, Sphere, basil, new(Mathf.Cos(a) * .13f, .095f, Mathf.Sin(a) * .13f), new(0, i * 60, 0), new(.12f, .015f, .07f));
         }
         return whole;
     }

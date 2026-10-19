@@ -17,46 +17,119 @@ public static partial class Products
         return root;
     }
 
-    // bundle of spaghetti held by a blue paper band
+    // packet of spaghetti: tall blue box, a window showing the golden strands, the name on top
     static GameObject Pasta()
     {
         var root = new GameObject("Pasta");
-        var rod = Plain(C("#f2d27a"), .4f);
-        for (int i = -3; i <= 3; i++)
-            for (int j = -3; j <= 3; j++)
-            {
-                var p = new Vector2(i * .06f + (j % 2) * .03f, j * .052f);
-                if (p.magnitude < .17f) Part(root, Cylinder, rod, new(p.x, .55f, p.y), scale: new(.045f, .55f, .045f));
-            }
+        const float w = .5f, h = 1.1f, d = .22f;
         var cv = new Canvas(256, 256);
-        cv.Paint((u, v) => Mathf.Abs(v - .5f) > .4f ? C("#ffd23f") : C("#1e4fa8"));
-        LatheText(cv, "PASTA", 2 * Mathf.PI * .2f, .38f, .19f, .14f, Color.white);
-        Spin(root, P(0, .3f, .2f, .3f, .2f, .68f, 0, .68f), Textured(cv, .4f));
+        cv.Paint((u, v) =>
+        {
+            float fu = Mathf.Repeat(u, .5f) / .5f, fv = v / BoxSide;
+            if (v >= BoxSide) return C("#1e4fa8");
+            if (u < .5f && fu > .2f && fu < .8f && fv > .12f && fv < .55f) // window
+                return Mathf.Repeat(fu * 40, 1) < .55f ? C("#f2d27a") : C("#d9b25a");
+            return Mathf.Abs(fv - .6f) < .02f ? C("#ffd23f") : C("#1e4fa8");
+        });
+        BoxText(cv, "SPAGHETTI", w, d, h, .78f, .1f, Color.white);
+        Part(root, BoxMesh(w, h, d, 0), Textured(cv, .4f), Vector3.zero);
         return root;
     }
 
-    // ball of mozzarella with its little knot, two basil leaves
-    static GameObject Mozzarella()
-    {
-        var root = new GameObject("Mozzarella");
-        var white = Plain(C("#fbfbf3"), .55f);
-        Spin(root, Ball(.32f, .3f, .92f), white);
-        Part(root, Sphere, white, new(0, .62f, 0), scale: new(.14f, .1f, .14f));
-        var basil = Plain(C("#3e9b3a"), .4f);
-        Part(root, Sphere, basil, new(.26f, .1f, -.22f), new(0, 30, 0), new(.26f, .05f, .14f));
-        Part(root, Sphere, basil, new(.08f, .06f, -.32f), new(0, -20, 0), new(.24f, .05f, .13f));
-        return root;
-    }
-
-    // espresso: small white cup on its saucer, crema on top
+    // espresso: small white cup with its handle on a saucer, dark coffee under a hazelnut crema ring
     static GameObject Espresso()
     {
         var root = new GameObject("Espresso");
-        var china = Plain(C("#fbfbf7"), .7f);
+        var china = Plain(C("#fbfbf7"), .75f);
         Spin(root, P(0, 0, .42f, 0, .44f, .04f, .4f, .06f, 0, .05f), china);
-        Spin(root, P(0, .05f, .15f, .05f, .24f, .15f, .27f, .5f, 0, .5f), china);
-        Spin(root, P(0, .48f, .25f, .48f, .25f, .505f, 0, .505f), Plain(C("#a8683a"), .5f));
-        Part(root, Cube, china, new(.31f, .32f, 0), scale: new(.1f, .16f, .05f));
+        Spin(root, P(0, .05f, .14f, .05f, .23f, .12f, .27f, .48f, .25f, .5f, .23f, .45f, 0, .45f), china);
+        Spin(root, P(0, .44f, .235f, .44f, .235f, .455f, 0, .455f), Plain(C("#3b1d10"), .7f));
+        Spin(root, Torus(.17f, .025f), Plain(C("#b77a45"), .5f), new(0, .432f, 0)); // crema ring
+        Spin(root, Torus(.09f, .03f), china, new(.3f, .3f, 0), new(90, 0, 0)); // handle
+        return root;
+    }
+
+    // slice of tiramisu on a plate: sponge and mascarpone layers, cocoa on top
+    static GameObject Tiramisu()
+    {
+        var root = new GameObject("Tiramisu");
+        Spin(root, P(0, 0, .46f, 0, .48f, .03f, .44f, .05f, 0, .04f), Plain(C("#fbfbf7"), .7f));
+        var sponge = Plain(C("#9a6438"), .2f);
+        var cream = Plain(C("#f6ead2"), .3f);
+        for (int i = 0; i < 4; i++)
+            Part(root, Cube, i % 2 == 0 ? sponge : cream, new(0, .1f + i * .1f, 0), scale: new(.64f, .1f, .5f));
+        Part(root, Cube, Paint((u, v) => C("#5a3018") * (.85f + .3f * Mathf.PerlinNoise(u * 30, v * 30)), .1f),
+            new(0, .465f, 0), scale: new(.64f, .03f, .5f));
+        return root;
+    }
+
+    // cannolo: blistered golden shell, generous ricotta cream at both ends dotted with pistachio and chocolate
+    static GameObject Cannolo()
+    {
+        var root = new GameObject("Cannolo");
+        var body = Tilted(root, new(0, 0, 10), new(0, .24f, 0));
+        Part(body, Cylinder, Paint((u, v) =>
+        {
+            float n = Mathf.PerlinNoise(u * 40, v * 14);
+            return n > .64f ? C("#c98a3e") : Color.Lerp(C("#7a3c16"), C("#a8602a"), n); // fried shell with little blisters
+        }, .45f), Vector3.zero, new(0, 0, 90), new(.4f, .3f, .4f));
+        var cream = Plain(C("#fbf6ea"), .25f);
+        var pistachio = Plain(C("#7fb23e"), .3f);
+        var choc = Plain(C("#3b2416"), .3f);
+        foreach (float x in new[] { -.32f, .32f })
+        {
+            Part(body, Sphere, cream, new(x + Mathf.Sign(x) * .06f, 0, 0), scale: new(.34f, .4f, .4f));
+            for (int k = 0; k < 7; k++)
+            {
+                float a = k * 0.9f;
+                var p = new Vector3(x + Mathf.Sign(x) * .2f, Mathf.Cos(a) * .12f, Mathf.Sin(a) * .12f);
+                Part(body, Sphere, k % 3 == 0 ? choc : pistachio, p, scale: Vector3.one * .07f);
+            }
+        }
+        return root;
+    }
+
+    // Parmigiano: tall wheel with its rind and stamped name, a wedge cut off leaning in front
+    static GameObject Parmesan()
+    {
+        var root = new GameObject("Parmesan");
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) => v > .08f && v < .92f
+            ? C("#e3b35a") * (.93f + .12f * (Dot(u, v, 40, 10, .5f, .25f, 3, out _) ? -.4f : Mathf.PerlinNoise(u * 50, v * 6)))
+            : C("#d39a45"));
+        LatheText(cv, "PARMIGIANO", 2 * Mathf.PI * .46f, .52f, .26f, .12f, C("#7a4a1c"));
+        Spin(root, P(0, 0, .43f, 0, .46f, .05f, .46f, .47f, .43f, .52f, 0, .52f), Textured(cv, .25f), new(0, 0, .25f));
+        var grain = Paint((u, v) => Dot(u, v, 16, 16, .5f, .3f, 9, out _) ? C("#f9e7b0") : C("#f0d68a"), .2f);
+        Part(root, Prism(new(-.28f, 0, -.62f), new(.28f, 0, -.62f), new(0, 0, -.25f), new(0, .4f, 0)), grain, Vector3.zero);
+        Part(root, Cube, Plain(C("#d39a45"), .25f), new(0, .2f, -.635f), scale: new(.58f, .4f, .03f)); // the wedge's rind
+        return root;
+    }
+
+    // salami lying with its string, cut end showing the marbled inside, two slices flat in front
+    static GameObject Salami()
+    {
+        var root = new GameObject("Salami");
+        var marbled = Paint((u, v) => Dot(u, v, 12, 12, .65f, .28f, 6, out _) ? C("#f3d9cf") : C("#a8283a"), .4f);
+        var casing = Paint((u, v) => C("#6e2626") * (.85f + .3f * Mathf.PerlinNoise(u * 24, v * 40)) + (Dot(u, v, 18, 30, .3f, .2f, 4, out _) ? new Color(.25f, .25f, .25f, 0) : Color.clear), .3f);
+        Spin(root, P(0, 0, .17f, 0, .17f, .8f, .14f, .9f, .08f, .96f, 0, .97f), casing, new(.4f, .17f, .1f), new(0, 0, 90));
+        Part(root, Cylinder, marbled, new(.405f, .17f, .1f), new(0, 0, 90), new(.34f, .005f, .34f)); // cut end
+        Part(root, Cube, Plain(Color.white, .2f), new(-.6f, .17f, .1f), scale: new(.1f, .05f, .05f)); // string
+        Part(root, Cylinder, marbled, new(-.1f, .02f, -.28f), scale: new(.32f, .02f, .32f));
+        Part(root, Cylinder, marbled, new(.24f, .045f, -.3f), new(6, 0, 0), new(.32f, .02f, .32f));
+        return root;
+    }
+
+    // panettone: tall loaf in its golden paper, dark domed top split in a cross, a few raisins
+    static GameObject Panettone()
+    {
+        var root = new GameObject("Panettone");
+        Spin(root, P(0, 0, .3f, 0, .3f, .7f, .33f, .78f, .29f, .92f, .17f, 1f, 0, 1.02f), Paint((u, v) =>
+        {
+            if (v < .69f) return C("#c9a04a") * (Mathf.Repeat(u * 24, 1) < .5f ? 1f : .88f) * (Mathf.Abs(v - .35f) < .06f ? .75f : 1f); // pleated paper
+            if (Mathf.Abs(Mathf.Repeat(u * 4, 1) - .5f) < .03f && v > .85f) return C("#e9c27a"); // the cross cut
+            if (Dot(u, v, 18, 8, .25f, .25f, 13, out _)) return C("#3b1a10"); // raisins
+            return Color.Lerp(C("#7a3e15"), C("#b8682a"), Mathf.PerlinNoise(u * 16, v * 16));
+        }, .35f, 256));
         return root;
     }
 
