@@ -16,6 +16,33 @@ public static class Setup
     static void EnsureUrp()
     {
         if (GraphicsSettings.defaultRenderPipeline == null) EditorApplication.delayCall += SetupUrp;
+        if (!AssetDatabase.LoadAssetAtPath<Material>(IcePath)) EditorApplication.delayCall += CreateIceMaterial;
+    }
+
+    const string IcePath = "Assets/Resources/Ice.mat";
+
+    // Translucent URP Lit for ice blocks. It has to exist as an asset: a transparent Lit set up only at runtime
+    // would lose its shader variant to build stripping and render opaque on device.
+    [MenuItem("Shelf Sort/Create Ice Material")]
+    public static void CreateIceMaterial()
+    {
+        if (AssetDatabase.LoadAssetAtPath<Material>(IcePath)) return;
+        var m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        m.SetFloat("_Surface", 1); // transparent
+        m.SetFloat("_Blend", 0); // alpha blending
+        m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        m.SetFloat("_SrcBlendAlpha", (float)UnityEngine.Rendering.BlendMode.One);
+        m.SetFloat("_DstBlendAlpha", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        m.SetFloat("_ZWrite", 0);
+        m.SetOverrideTag("RenderType", "Transparent");
+        m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        m.SetColor("_BaseColor", new Color(.72f, .9f, 1f, .42f));
+        m.SetFloat("_Smoothness", .92f);
+        AssetDatabase.CreateAsset(m, IcePath);
+        AssetDatabase.SaveAssets();
+        Debug.Log("Shelf Sort: ice material created");
     }
 
     [MenuItem("Shelf Sort/Setup URP")]
@@ -63,7 +90,7 @@ public static class Setup
         {
             var lv = LevelGen.Make(n, rng);
             var items = lv.Shelves.SelectMany(s => s).SelectMany(r => r).Where(x => x >= 0);
-            if (items.GroupBy(x => x).Any(g => g.Count() != 3)) throw new System.Exception($"Level {n}: bad item counts");
+            if (items.GroupBy(LevelGen.Id).Any(g => g.Count() != 3)) throw new System.Exception($"Level {n}: bad item counts");
             if (lv.Shelves.All(s => s[0].All(x => x >= 0))) throw new System.Exception($"Level {n}: no free slot");
             if (!LevelGen.Solvable(lv.Shelves)) throw new System.Exception($"Level {n}: not solvable");
         }

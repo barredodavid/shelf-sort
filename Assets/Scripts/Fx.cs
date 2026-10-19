@@ -74,7 +74,7 @@ public static class Fx
         main.stopAction = ParticleSystemStopAction.Destroy;
         var em = ps.emission;
         em.rateOverTime = 0;
-        em.SetBurst(0, new ParticleSystem.Burst(0, count));
+        em.SetBursts(new[] { new ParticleSystem.Burst(0, count) }); // SetBurst(0, ..) needs an existing burst
         var sh = ps.shape;
         sh.shapeType = ParticleSystemShapeType.Sphere;
         sh.radius = .3f;
@@ -84,9 +84,11 @@ public static class Fx
 
     // ---------- tweens (run with StartCoroutine; stop quietly if the object was destroyed) ----------
 
+    // Squash-and-stretch around the rest scale (1): starting from the current scale would compound when taps
+    // overlap and leave the object deformed.
     public static IEnumerator Squash(Transform t, float dur = .3f)
     {
-        var s0 = t.localScale;
+        var s0 = Vector3.one;
         for (float e = 0; e < dur; e += Time.deltaTime)
         {
             if (!t) yield break;
@@ -118,6 +120,83 @@ public static class Fx
             yield return null;
         }
         cam.position = home;
+    }
+
+    // Stylized ice face: clear blue core, frosted white border (noisy), two diagonal glints and a few cracks.
+    // Alpha carries the effect, so the material must be transparent.
+    public static Texture2D IceTexture(int size = 128, int seed = 7)
+    {
+        var rng = new System.Random(seed);
+        var px = new Color[size * size];
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float u = (float)x / size, v = (float)y / size;
+                float edge = Mathf.Min(Mathf.Min(u, 1 - u), Mathf.Min(v, 1 - v)); // 0 at the border, .5 in the middle
+                float noise = Mathf.PerlinNoise(u * 9 + seed, v * 9);
+                float frost = Mathf.Clamp01(1 - (edge - .03f) / (.13f + .07f * noise)); // ragged frosted rim
+                var c = new Color(.72f, .9f, 1f, .32f);
+                c = Color.Lerp(c, new Color(.97f, .99f, 1f, .9f), frost);
+                // two glints across the face, upper left
+                float d = u + (1 - v);
+                if (Mathf.Abs(d - .62f) < .05f || Mathf.Abs(d - .8f) < .022f)
+                    c = Color.Lerp(c, new Color(1, 1, 1, .85f), .85f * Mathf.Clamp01((1.25f - d) * 3));
+                px[y * size + x] = c;
+            }
+
+        // cracks: short jagged white lines from the rim inward
+        for (int k = 0; k < 3; k++)
+        {
+            Vector2 p = new(rng.Next(size), rng.Next(2) == 0 ? 2 : size - 3);
+            float a = (float)rng.NextDouble() * Mathf.PI;
+            for (int step = 0; step < size / 3; step++)
+            {
+                a += ((float)rng.NextDouble() - .5f) * .9f;
+                p += new Vector2(Mathf.Cos(a), p.y < size / 2 ? Mathf.Abs(Mathf.Sin(a)) : -Mathf.Abs(Mathf.Sin(a)));
+                int cx = Mathf.Clamp((int)p.x, 0, size - 1), cy = Mathf.Clamp((int)p.y, 0, size - 1);
+                px[cy * size + cx] = new Color(1, 1, 1, .95f);
+                if (cx + 1 < size) px[cy * size + cx + 1] = Color.Lerp(px[cy * size + cx + 1], new Color(1, 1, 1, .9f), .6f);
+            }
+        }
+
+        var t = new Texture2D(size, size, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp };
+        t.SetPixels(px);
+        t.Apply();
+        return t;
+    }
+
+    // White five-pointed star with soft edges (4x4 supersampling), tinted with GUI.color
+    public static Texture2D Star(int size)
+    {
+        var pts = new Vector2[10];
+        for (int i = 0; i < 10; i++)
+        {
+            float a = Mathf.PI / 2 + i * Mathf.PI / 5, r = (i % 2 == 0 ? .5f : .21f) * size;
+            pts[i] = new Vector2(size / 2f + Mathf.Cos(a) * r, size / 2f + Mathf.Sin(a) * r * 1.02f - size * .03f);
+        }
+        var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                int inside = 0;
+                for (int sy = 0; sy < 4; sy++)
+                    for (int sx = 0; sx < 4; sx++)
+                        if (Inside(pts, new Vector2(x + (sx + .5f) / 4, y + (sy + .5f) / 4))) inside++;
+                t.SetPixel(x, y, new Color(1, 1, 1, inside / 16f));
+            }
+        t.Apply();
+        return t;
+    }
+
+    // even-odd point-in-polygon
+    static bool Inside(Vector2[] poly, Vector2 p)
+    {
+        bool c = false;
+        for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
+            if ((poly[i].y > p.y) != (poly[j].y > p.y) &&
+                p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)
+                c = !c;
+        return c;
     }
 
     // White rounded square; used as a 9-sliced IMGUI background, tinted with GUI.backgroundColor

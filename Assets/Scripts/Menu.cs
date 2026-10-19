@@ -3,10 +3,10 @@ using System.Linq;
 using UnityEngine;
 
 // Title screen and pause menu. The title screen shows the logo over a little display shelf of hopping
-// products; the level is dealt behind the scenes and its timer only starts on "JOUER".
+// products (from the last played world); "JOUER" leads to the world map (Worlds.cs).
 public partial class Game
 {
-    enum Menu { None, Home, Pause }
+    enum Menu { None, Home, Pause, Worlds, Levels }
 
     Menu menu = Menu.Home;
     float menuAt;
@@ -36,14 +36,7 @@ public partial class Game
         menu = m;
         menuAt = Time.time;
         Fx.Play("pick");
-        if (m == Menu.Home) Render();
-    }
-
-    void Play()
-    {
-        menu = Menu.None;
-        Render();
-        Fx.Play("match");
+        if (m != Menu.Pause) Render(); // full screens replace the board (pause overlays it)
     }
 
     // ---------- title screen: 3D part ----------
@@ -62,7 +55,11 @@ public partial class Game
         Box(new Vector3(0, -.13f, -.81f), new Vector3(7.6f, .16f, .02f), Cream).transform.SetParent(heroRoot);
         for (int i = 0; i < HeroIds.Length; i++)
         {
-            var t = Item(HeroIds[i], new Vector3((i - 2) * 1.45f, 0, 0), 1.3f, false, "hero").transform;
+            var pos = new Vector3((i - 2) * 1.45f, 0, 0);
+            // ponytail: preview of a procedural product (Products.cs) in the middle; remove once the factory feeds the worlds
+            var t = (i == 2
+                ? Wrap(Products.Bottle(new Color(.16f, .06f, .04f), new Color(.86f, .13f, .13f), new Color(.86f, .13f, .13f), "SODA", .78f), pos, 1.3f, "hero", null)
+                : Item(HeroIds[i], pos, 1.3f, false, "hero")).transform;
             t.SetParent(heroRoot, false);
             heroes.Add(t);
         }
@@ -105,7 +102,7 @@ public partial class Game
         Panel(tag, Ink);
         Label(tag, "LE PUZZLE DE LA SUPÉRETTE", 38, Color.white);
 
-        // bottom block, from the bottom up: renovation progress, renovation, level, play
+        // bottom block, from the bottom up: renovation progress, renovation, stars, play
         int done = Enumerable.Range(0, Upgrades.Length).Count(Owned);
         var prog = new Rect(160, bottom - 30, W - 320, 30);
         Panel(prog, new Color(0, 0, 0, .2f));
@@ -117,17 +114,16 @@ public partial class Game
         if (CanBuyAny) Badge(renov.xMax - 44, renov.y - 22, "!");
 
         var play = new Rect(60, renov.y - 50 - 210, W - 120, 210);
-        var lvl = new Rect(W / 2 - 200, play.y - 100, 400, 76);
-        Panel(lvl, hard ? Red : Cream);
-        Label(lvl, hard ? $"NIVEAU {level} · HARD" : $"NIVEAU {level}", 40, hard ? Color.white : Ink);
+        float starsY = play.y - 120;
+        StarCount(W / 2 - 125, starsY, TotalStars);
 
         float pulse = 1 + .03f * Mathf.Sin(Time.time * 4); // gently breathing call to action
         keep = GUI.matrix;
         GUIUtility.ScaleAroundPivot(Vector2.one * pulse, play.center * k);
-        if (Button(play, "JOUER", Gold, 110)) Play();
+        if (Button(play, "JOUER", Gold, 110)) OpenMenu(Menu.Worlds);
         GUI.matrix = keep;
 
-        heroCenterPx = (tag.yMax + lvl.y) / 2;
+        heroCenterPx = (tag.yMax + starsY) / 2;
     }
 
     // big title text: white outline, soft drop shadow, red fill
@@ -146,9 +142,8 @@ public partial class Game
     {
         Panel(new Rect(-100, -100, W + 200, H + 200), new Color(0, 0, 0, .55f));
 
-        float a = Mathf.Clamp01((Time.time - menuAt) / .25f) - 1; // same pop-in as the other cards
         var keep = GUI.matrix;
-        GUIUtility.ScaleAroundPivot(Vector2.one * (1 + 2.7f * a * a * a + 1.7f * a * a), new Vector2(W / 2 * k, H / 2 * k));
+        GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(menuAt), new Vector2(W / 2 * k, H / 2 * k));
 
         var card = new Rect(90, H / 2 - 450, W - 180, 900);
         Panel(new Rect(card.x, card.y + 18, card.width, card.height), Darker(Cream));
@@ -158,7 +153,7 @@ public partial class Game
         float bx = card.x + 70, bw = card.width - 140;
         if (Button(new Rect(bx, card.y + 230, bw, 140), "Reprendre", Gold, 54)) menu = Menu.None;
         if (Button(new Rect(bx, card.y + 410, bw, 130), "Recommencer", Mist, 46)) { StartLevel(); menu = Menu.None; }
-        if (Button(new Rect(bx, card.y + 580, bw, 130), "Accueil", Mist, 46)) { StartLevel(); OpenMenu(Menu.Home); }
+        if (Button(new Rect(bx, card.y + 580, bw, 130), "Niveaux", Mist, 46)) OpenMenu(Menu.Levels);
         if (Button(new Rect(bx, card.y + 750, bw, 110), SoundOn ? "Son : oui" : "Son : non", Mist, 40)) ToggleSound();
         GUI.matrix = keep;
     }

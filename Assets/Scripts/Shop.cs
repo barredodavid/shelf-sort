@@ -71,9 +71,8 @@ public partial class Game
     {
         Panel(new Rect(-100, -100, W + 200, H + 200), new Color(0, 0, 0, .55f));
 
-        float a = Mathf.Clamp01((Time.time - shopAt) / .25f) - 1; // same pop-in as the end card
         var keep = GUI.matrix;
-        GUIUtility.ScaleAroundPivot(Vector2.one * (1 + 2.7f * a * a * a + 1.7f * a * a), new Vector2(W / 2 * k, H / 2 * k));
+        GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(shopAt), new Vector2(W / 2 * k, H / 2 * k));
 
         int done = Enumerable.Range(0, Upgrades.Length).Count(Owned);
         const float rowH = 130, rowGap = 16;

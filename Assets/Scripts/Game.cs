@@ -8,20 +8,13 @@ using UnityEngine.Rendering.Universal;
 // Whole game in one component: board state, 3D views, drag & drop, timer, bonuses, IMGUI HUD.
 public partial class Game : MonoBehaviour
 {
-    // Cute Supermarket Lite (CC0) prefabs in Assets/Resources; index = item id (0, 1, 2 are the tutorial's three products)
-    const string Pack = "Cute Supermarket Lite/Prefabs/";
-    static readonly string[] Foods =
-    {
-        "bottle_small_red", "donut_red", "bottle1_water", "apple_green", "bottle2_pink", "can_food_blue",
-        "cream_jar_yellow", "dressing_mayo", "flask_coffee", "jam_purple", "roll_toilet", "watermelon_quart",
-    };
-    Material foodMat, ghostMat;
+    // products come from the current world's theme (Worlds.cs)
     static readonly Color Wall = new(.47f, .74f, .8f), Wood = new(.72f, .5f, .32f), Backboard = new(.93f, .85f, .72f);
-    GameObject[] foodModels;
 
     const float SlotW = 1.1f, ShelfW = 3.35f, ColGap = .3f;
     float rowH = 2.5f, boardY; // set by FitCamera so the shelving unit fills the space between HUD and bonus bar
     Transform wall;
+    Texture2D wallTex;
     // BackOff/BackScale: where and how big the next row waits, relative to its slot. The riser grows with the row
     // height so the waiting row fills the space above the front one.
     float BackLift => rowH * .36f;
@@ -42,7 +35,8 @@ public partial class Game : MonoBehaviour
     List<List<int[]>> shelves;
     readonly Stack<List<List<int[]>>> history = new();
     readonly Dictionary<(int, int), GameObject> views = new();
-    int level, coins, combo, undoLeft, shuffleLeft, timeLeft;
+    int coins, combo, undoLeft, shuffleLeft, timeLeft, moves, par;
+    readonly HashSet<int> locked = new(); // shelves mid-animation (popping trio, row sliding forward): no picking or dropping there
     float time, total, lastMatch, toastUntil, overAt;
     bool hard, busy, over, adUsed, won;
     string title, subtitle, toast;
@@ -70,16 +64,6 @@ public partial class Game : MonoBehaviour
         // steep and mostly frontal: short shadows that land on the shelf right under/behind each product
         sun.transform.rotation = Quaternion.Euler(55, 15, 0);
 
-        foodModels = Foods.Select(f => Resources.Load<GameObject>(Pack + f)).ToArray();
-        // All products share one colormap texture: one URP Lit material for all, one dark one for the waiting row
-        foodMat = new Material(GraphicsSettings.currentRenderPipeline.defaultMaterial)
-        {
-            mainTexture = foodModels[0].GetComponentInChildren<Renderer>().sharedMaterial.mainTexture,
-            color = Color.white,
-        };
-        foodMat.SetFloat("_Smoothness", .2f);
-        ghostMat = new Material(foodMat) { color = new Color(.35f, .37f, .45f) };
-
         cam.GetUniversalAdditionalCameraData().renderPostProcessing = true;
         PostFx();
         BakeWall();
@@ -88,9 +72,9 @@ public partial class Game : MonoBehaviour
         Fx.Init(gameObject);
         ApplySound();
 
-        level = PlayerPrefs.GetInt("lvl", 1);
         coins = PlayerPrefs.GetInt("coins", 0);
-        StartLevel();
+        world = PlayerPrefs.GetInt("world", 0); // the title screen shows the last played world's products
+        Render();
     }
 
     // Warm, saturated "candy" grade with a soft glow; tune these numbers to taste
@@ -148,20 +132,25 @@ public partial class Game : MonoBehaviour
             wr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             wr.material = new Material(GraphicsSettings.currentRenderPipeline.defaultParticleMaterial) { color = Color.white };
         }
-        var mat = wall.GetComponent<Renderer>().material;
-        Destroy(mat.mainTexture);
-        mat.mainTexture = tex;
+        if (wallTex) Destroy(wallTex); // only our own previous bake: the material starts with a built-in texture asset
+        wallTex = tex;
+        wall.GetComponent<Renderer>().material.mainTexture = tex;
     }
 
     void StartLevel()
     {
         StopAllCoroutines();
         cam.transform.position = CamHome;
-        var lv = LevelGen.Make(level, rng);
+        var lv = LevelGen.Make(world * LevelsPerWorld + lvl + 1, rng);
         shelves = lv.Shelves;
-        time = total = lv.Time;
+        time = total = baseTime = lv.Time;
         hard = lv.Hard;
-        busy = over = adUsed = won = false;
+        par = lv.Par;
+        moves = 0;
+        locked.Clear();
+        dragGo = null;
+        dragS = -1;
+        busy = over = adUsed = won = usedBonus = false;
         history.Clear();
         undoLeft = shuffleLeft = timeLeft = 1;
         combo = 0;
@@ -171,7 +160,7 @@ public partial class Game : MonoBehaviour
 
     // ---------- layout ----------
 
-    int Rows => (shelves.Count + 1) / 2;
+    int Rows => shelves == null ? 3 : (shelves.Count + 1) / 2; // no level dealt yet (title screen): standard layout
 
     // plank center of shelf s; row 0 is the top row
     Vector3 ShelfPos(int s)
@@ -225,6 +214,7 @@ public partial class Game : MonoBehaviour
             RenderHome();
             return;
         }
+        if (menu is Menu.Worlds or Menu.Levels) return; // map screens: just the wall behind the GUI
 
         // one shelving unit for the whole board: back panel, three posts, crown on top
         float bottom = boardY - Rows * rowH / 2 - .11f, height = Rows * rowH + .11f;
@@ -246,6 +236,7 @@ public partial class Game : MonoBehaviour
             for (int i = 0; i < 3; i++)
             {
                 if (sh[0][i] >= 0) views[(s, i)] = Item(sh[0][i], SlotPos(s, i), 1f, false, $"{s},{i}");
+                if (LevelGen.IsFrozen(sh[0][i])) IceFrame(views[(s, i)].transform);
                 // next row waits behind, on the riser, so it peeks over the front one
                 if (sh.Count > 1 && sh[1][i] >= 0) Item(sh[1][i], SlotPos(s, i) + BackOff, BackScale, true, "back");
             }
@@ -266,13 +257,21 @@ public partial class Game : MonoBehaviour
     // Wraps the model in a pivot at its feet, so every product stands on its slot and fits a 1.04 wide x 1.45 tall box, whatever its native size.
     GameObject Item(int id, Vector3 pos, float scale, bool ghost, string name)
     {
+        var model = Instantiate(Model(LevelGen.Id(id)));
+        var mat = ghost ? worldGhosts[world] : LevelGen.IsFrozen(id) ? worldIce[world] : worldMats[world];
+        return Wrap(model, pos, scale, name, mat);
+    }
+
+    // Puts a model instance in a pivot at its feet, sized to the slot; mat (if any) replaces its materials
+    GameObject Wrap(GameObject model, Vector3 pos, float scale, string name, Material mat)
+    {
         var go = new GameObject(name);
         go.transform.SetParent(root);
         go.transform.position = pos;
-        var model = Instantiate(foodModels[id], go.transform);
+        model.transform.SetParent(go.transform, false);
         model.transform.localRotation = Quaternion.Euler(-20, 0, 0) * Quaternion.Euler(0, 35, 0); // 3/4 view; with the camera tilt, seen from ~30° above
         var rs = model.GetComponentsInChildren<Renderer>();
-        foreach (var r in rs) r.sharedMaterials = Enumerable.Repeat(ghost ? ghostMat : foodMat, r.sharedMaterials.Length).ToArray();
+        if (mat) foreach (var r in rs) r.sharedMaterials = Enumerable.Repeat(mat, r.sharedMaterials.Length).ToArray();
         var b = rs[0].bounds;
         foreach (var r in rs) b.Encapsulate(r.bounds);
         float k = Mathf.Min(1.04f / b.size.x, 1.45f / b.size.y, 1.04f / b.size.z);
@@ -284,6 +283,39 @@ public partial class Game : MonoBehaviour
         return go;
     }
 
+    // Ice block around a frozen product (on its feet pivot): a translucent cube textured with frost, glints and
+    // cracks (Fx.IceTexture), capped with snow, over the product's icy tint.
+    Material iceBlockMat;
+
+    void IceFrame(Transform item)
+    {
+        const float w = 1.16f, h = 1.6f, d = 1.1f;
+        if (!iceBlockMat)
+        {
+            var asset = Resources.Load<Material>("Ice"); // transparent URP Lit, created by Setup (keeps its variant in builds)
+            if (!asset) return;
+            iceBlockMat = new Material(asset) { mainTexture = Fx.IceTexture(), color = Color.white };
+        }
+        var cube = Box(item.position + new Vector3(0, h / 2, 0), new Vector3(w, h, d), Color.white);
+        var r = cube.GetComponent<Renderer>();
+        r.sharedMaterial = iceBlockMat;
+        r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        cube.transform.SetParent(item, true);
+
+        // snow: a slab overhanging the top, plus a smaller lump on it
+        var snow = new Color(.97f, .99f, 1f);
+        foreach (var (pos, size) in new[]
+                 {
+                     (new Vector3(0, h + .05f, 0), new Vector3(w + .08f, .12f, d + .08f)),
+                     (new Vector3(-.12f, h + .15f, -.05f), new Vector3(w * .55f, .1f, d * .6f)),
+                 })
+        {
+            var s = Box(item.position + pos, size, snow);
+            s.GetComponent<Renderer>().material.SetFloat("_Smoothness", .1f);
+            s.transform.SetParent(item, true);
+        }
+    }
+
     (int, int) NearestItem(Vector3 p)
     {
         (int, int) best = (-1, -1);
@@ -291,7 +323,7 @@ public partial class Game : MonoBehaviour
         for (int s = 0; s < shelves.Count; s++)
             for (int i = 0; i < 3; i++)
             {
-                if (shelves[s][0][i] < 0) continue;
+                if (shelves[s][0][i] < 0 || locked.Contains(s)) continue;
                 float d = Vector2.Distance(p, SlotAim(s, i));
                 if (d < bestD) { bestD = d; best = (s, i); }
             }
@@ -303,6 +335,7 @@ public partial class Game : MonoBehaviour
     void Update()
     {
         AnimateHome();
+        TickStars();
         if (!busy && !over && !Paused)
         {
             time = Mathf.Max(0, time - Time.deltaTime);
@@ -312,10 +345,17 @@ public partial class Game : MonoBehaviour
         // Touch is delivered as mouse (Input.simulateMouseWithTouches is on by default)
         Vector3 world = OnBoard(Input.mousePosition);
 
-        if (Input.GetMouseButtonDown(0) && !busy && !over && !Paused)
+        // Picking stays possible while trios pop elsewhere: only the animating shelves are locked
+        if (Input.GetMouseButtonDown(0) && !over && !Paused)
         {
             var (s, i) = NearestItem(world);
-            if (s >= 0)
+            if (s >= 0 && LevelGen.IsFrozen(shelves[s][0][i]))
+            {
+                Fx.Play("back");
+                StartCoroutine(Fx.Squash(views[(s, i)].transform));
+                Toast("Glacé !");
+            }
+            else if (s >= 0)
             {
                 dragS = s;
                 dragI = i;
@@ -336,10 +376,10 @@ public partial class Game : MonoBehaviour
             int s = dragS, i = dragI;
             dragGo = null;
             dragS = -1;
-            if (ts >= 0 && !busy && !over)
+            if (ts >= 0 && !over)
             {
                 Fx.Play("drop", Random.Range(.95f, 1.05f));
-                Move(s, i, ts, ti);
+                Move(s, i, ts, ti, go);
             }
             else
             {
@@ -349,6 +389,16 @@ public partial class Game : MonoBehaviour
         }
     }
 
+    // Resolve() rebuilds every view; a product held by the finger is handed over to its rebuilt view
+    void KeepDrag()
+    {
+        if (dragS < 0 || !views.TryGetValue((dragS, dragI), out var v)) return;
+        var pos = dragGo ? dragGo.transform.position : v.transform.position;
+        dragGo = v;
+        dragGo.transform.position = pos;
+        dragGo.transform.localScale = Vector3.one * 1.2f;
+    }
+
     (int, int) NearestEmpty(Vector3 p)
     {
         (int, int) best = (-1, -1);
@@ -356,7 +406,7 @@ public partial class Game : MonoBehaviour
         for (int s = 0; s < shelves.Count; s++)
             for (int i = 0; i < 3; i++)
             {
-                if (shelves[s][0][i] >= 0) continue;
+                if (shelves[s][0][i] >= 0 || locked.Contains(s)) continue;
                 float d = Vector2.Distance(p, SlotAim(s, i));
                 if (d < bestD) { bestD = d; best = (s, i); }
             }
@@ -367,16 +417,24 @@ public partial class Game : MonoBehaviour
 
     static List<List<int[]>> Clone(List<List<int[]>> b) => b.Select(sh => sh.Select(r => (int[])r.Clone()).ToList()).ToList();
 
-    void Move(int a, int i, int b, int j)
+    void Move(int a, int i, int b, int j, Transform view)
     {
         history.Push(Clone(shelves));
         shelves[b][0][j] = shelves[a][0][i];
         shelves[a][0][i] = -1;
-        StartCoroutine(Resolve(b, j));
+        moves++;
+        // the dropped product settles into its slot right away, even while another shelf is still animating
+        views.Remove((a, i));
+        views[(b, j)] = view.gameObject;
+        view.position = SlotPos(b, j);
+        view.localScale = Vector3.one;
+        StartCoroutine(Fx.Squash(view));
+        if (!busy) StartCoroutine(Resolve()); // a running Resolve re-reads the board on its next pass
     }
 
-    // Promotes emptied rows, pops trios, repeats until stable. (landS, landI) = slot that just received an item, for the bounce.
-    IEnumerator Resolve(int landS = -1, int landI = -1)
+    // Promotes emptied rows, pops trios, repeats until stable. Only the shelves being animated are locked, so the
+    // player can keep moving products elsewhere; their moves are picked up on the next pass of the loop.
+    IEnumerator Resolve()
     {
         busy = true;
         while (true)
@@ -388,21 +446,25 @@ public partial class Game : MonoBehaviour
                     shelves[s].RemoveAt(0);
                     promoted.Add(s);
                 }
+
+            if (promoted.Count > 0)
+            {
+                Render();
+                KeepDrag();
+                // the waiting row slides forward from the riser
+                locked.UnionWith(promoted);
+                foreach (int s in promoted)
+                    for (int i = 0; i < 3; i++)
+                        if (views.TryGetValue((s, i), out var v))
+                            StartCoroutine(Fx.Move(v.transform, SlotPos(s, i) + BackOff, SlotPos(s, i), Vector3.one * BackScale, Vector3.one, .2f));
+                yield return new WaitForSeconds(.2f);
+                locked.Clear();
+            }
+
+            // read the board only now: moves made during the slide count. No yield from here to break/end.
             var hits = Enumerable.Range(0, shelves.Count).Where(s => LevelGen.Triple(shelves[s][0])).ToList();
-            Render();
-
-            if (landS >= 0 && !hits.Contains(landS) && views.TryGetValue((landS, landI), out var landed))
-                StartCoroutine(Fx.Squash(landed.transform));
-            landS = -1;
-
-            // the waiting row slides forward from the riser
-            foreach (int s in promoted)
-                for (int i = 0; i < 3; i++)
-                    if (views.TryGetValue((s, i), out var v))
-                        StartCoroutine(Fx.Move(v.transform, SlotPos(s, i) + BackOff, SlotPos(s, i), Vector3.one * BackScale, Vector3.one, .25f));
-            if (promoted.Count > 0) yield return new WaitForSeconds(.25f);
-
             if (hits.Count == 0) break;
+            locked.UnionWith(hits);
 
             combo = Time.time - lastMatch < 4 ? combo + 1 : 1;
             lastMatch = Time.time;
@@ -426,7 +488,13 @@ public partial class Game : MonoBehaviour
             {
                 Fx.Burst(ShelfPos(s) + new Vector3(0, .7f, -1));
                 shelves[s][0] = new[] { -1, -1, -1 };
+                for (int i = 0; i < 3; i++)
+                {
+                    Destroy(views[(s, i)]);
+                    views.Remove((s, i));
+                }
             }
+            locked.Clear();
         }
         busy = false;
 
@@ -436,7 +504,9 @@ public partial class Game : MonoBehaviour
 
     void DoShuffle()
     {
-        var cells = Enumerable.Range(0, shelves.Count).SelectMany(s => Enumerable.Range(0, 3).Select(i => (s, i))).ToList();
+        // frozen products stay put
+        var cells = Enumerable.Range(0, shelves.Count).SelectMany(s => Enumerable.Range(0, 3).Select(i => (s, i)))
+            .Where(c => !LevelGen.IsFrozen(shelves[c.s][0][c.i])).ToList();
         var vals = LevelGen.Shuffle(cells.Select(c => shelves[c.s][0][c.i]).ToList(), rng);
         for (int k = 0; k < cells.Count; k++) shelves[cells[k].s][0][cells[k].i] = vals[k];
     }
@@ -445,17 +515,10 @@ public partial class Game : MonoBehaviour
     {
         over = won = true;
         overAt = Time.time;
-        int gain = hard ? 25 : 10;
-        coins += gain;
-        title = "BRAVO !";
-        subtitle = $"Niveau {level} réussi\n+{gain} pièces";
+        ScoreLevel();
         Fx.Play("win");
         Fx.Burst(new Vector3(-2, 1, -2), 40);
         Fx.Burst(new Vector3(2, 1, -2), 40);
-        level++;
-        PlayerPrefs.SetInt("lvl", level);
-        PlayerPrefs.SetInt("coins", coins);
-        PlayerPrefs.Save();
     }
 
     void Lose(string msg)
@@ -561,16 +624,17 @@ public partial class Game : MonoBehaviour
         float W = 1080, H = Screen.height / k;
         var safe = Screen.safeArea;
         float top = (Screen.height - safe.yMax) / k + 30, bottom = H - safe.y / k - 50;
-        if (menu == Menu.Home)
+        switch (menu)
         {
-            HomeScreen(W, H, k, top - 30, bottom);
-            return;
+            case Menu.Home: HomeScreen(W, H, k, top - 30, bottom); return;
+            case Menu.Worlds: WorldsScreen(W, H, top - 30, bottom); return;
+            case Menu.Levels: LevelsScreen(W, H, top - 30, bottom); return;
         }
         bool live = !busy && !over && menu == Menu.None;
 
         // top bar: level (red on HARD levels), coins, pause
         Panel(new Rect(40, top, 420, 110), hard ? Red : Cream);
-        Label(new Rect(40, top, 420, 110), hard ? $"NIVEAU {level} · HARD" : $"NIVEAU {level}", hard ? 42 : 52, hard ? Color.white : Ink);
+        Label(new Rect(40, top, 420, 110), hard ? $"NIVEAU {LevelName} · HARD" : $"NIVEAU {LevelName}", hard ? 42 : 52, hard ? Color.white : Ink);
         CoinsButton(500, top, live);
         GUI.enabled = live;
         if (Button(new Rect(790, top, 250, 96), "Pause", Mist, 42)) OpenMenu(Menu.Pause);
@@ -582,7 +646,10 @@ public partial class Game : MonoBehaviour
         bool low = time < 10;
         var fill = low && Mathf.Repeat(Time.time, .5f) < .25f ? Color.white : low ? Red : Gold;
         Panel(new Rect(bar.x, bar.y, Mathf.Max(64, bar.width * time / total), bar.height), fill);
-        Label(bar, $"{Mathf.CeilToInt(time)} s", 40, Color.white, true);
+        Label(new Rect(bar.x + 30, bar.y, bar.width / 2, bar.height), $"{Mathf.CeilToInt(time)} s", 40, Color.white, true, TextAnchor.MiddleLeft);
+        // moves against the target for the moves star; turns red once over it
+        Label(new Rect(bar.center.x, bar.y, bar.width / 2 - 30, bar.height), $"{moves} / {par} coups", 40,
+            moves > par ? new Color(1f, .75f, .75f) : Color.white, true, TextAnchor.MiddleRight);
 
         var boardTop = cam.WorldToScreenPoint(new Vector3(0, BoardTopY + .3f, 0));
         StoreFront(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20);
@@ -654,40 +721,46 @@ public partial class Game : MonoBehaviour
     {
         switch (b)
         {
-            case 0: undoLeft--; shelves = history.Pop(); Render(); break;
-            case 1: shuffleLeft--; history.Push(Clone(shelves)); DoShuffle(); StartCoroutine(Resolve()); break;
-            case 2: timeLeft--; time += 15; total = Mathf.Max(total, time); Toast("+15 s"); break;
+            case 0: undoLeft--; usedBonus = true; shelves = history.Pop(); Render(); break;
+            case 1: shuffleLeft--; usedBonus = true; history.Push(Clone(shelves)); DoShuffle(); Render(); StartCoroutine(Resolve()); break;
+            case 2: timeLeft--; usedBonus = true; time += 15; total = Mathf.Max(total, time); Toast("+15 s"); break;
         }
+    }
+
+    // card pop-in scale over .25 s since `since`, with a small overshoot (ease-out-back). Never 0: a zero
+    // scale makes GUI.matrix non-invertible, which Unity rejects with an error.
+    static float PopIn(float since)
+    {
+        float a = Mathf.Clamp01((Time.time - since) / .25f) - 1;
+        return Mathf.Max(.01f, 1 + 2.7f * a * a * a + 1.7f * a * a);
     }
 
     void EndCard(float W, float H, float k)
     {
         Panel(new Rect(-100, -100, W + 200, H + 200), new Color(0, 0, 0, .55f));
 
-        // pop-in with a small overshoot (ease-out-back)
-        float a = Mathf.Clamp01((Time.time - overAt) / .25f) - 1;
-        float s = 1 + 2.7f * a * a * a + 1.7f * a * a;
         var keep = GUI.matrix;
-        GUIUtility.ScaleAroundPivot(Vector2.one * s, new Vector2(W / 2 * k, H / 2 * k));
+        GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(overAt), new Vector2(W / 2 * k, H / 2 * k));
 
-        var card = new Rect(90, H / 2 - 400, W - 180, 800);
-        Panel(new Rect(card.x, card.y + 18, card.width, card.height), Darker(Cream));
-        Panel(card, Cream);
-        Label(new Rect(card.x, card.y + 50, card.width, 140), title, won ? 110 : 80, won ? Gold : Red, true);
-        Label(new Rect(card.x + 40, card.y + 200, card.width - 80, 170), subtitle, 50, Ink);
-
-        var b1 = new Rect(card.x + 70, card.y + 420, card.width - 140, 150);
-        var b2 = new Rect(card.x + 70, card.y + 610, card.width - 140, 130);
         if (won)
         {
-            if (Button(b1, "Niveau suivant", Gold, 54)) StartLevel();
-            if (Button(b2, CanBuyAny ? "Rénover la supérette !" : "Rénover la supérette", Mist, 46)) OpenShop();
+            SummaryCard(W, H, k);
+            GUI.matrix = keep;
+            return;
         }
-        else
-        {
-            if (!adUsed && Button(b1, time <= 0 ? "Pub : +15 secondes" : "Pub : annuler 2 coups", Gold, 46)) ContinueAfterAd();
-            if (Button(adUsed ? b1 : b2, "Recommencer", Mist, 46)) StartLevel();
-        }
+
+        var card = new Rect(90, H / 2 - 480, W - 180, 960);
+        Panel(new Rect(card.x, card.y + 18, card.width, card.height), Darker(Cream));
+        Panel(card, Cream);
+        Label(new Rect(card.x, card.y + 50, card.width, 140), title, 80, Red, true);
+        Label(new Rect(card.x + 40, card.y + 200, card.width - 80, 170), subtitle, 50, Ink);
+
+        // ad (once), then retry and back to the level grid
+        var rows = new[] { new Rect(card.x + 70, card.y + 420, card.width - 140, 150), new Rect(card.x + 70, card.y + 610, card.width - 140, 130), new Rect(card.x + 70, card.y + 780, card.width - 140, 130) };
+        int r = 0;
+        if (!adUsed && Button(rows[r++], time <= 0 ? "Pub : +15 secondes" : "Pub : annuler 2 coups", Gold, 46)) ContinueAfterAd();
+        if (Button(rows[r++], "Recommencer", adUsed ? Gold : Mist, 46)) StartLevel();
+        if (Button(rows[r], "Niveaux", Mist, 46)) OpenMenu(Menu.Levels);
         GUI.matrix = keep;
     }
 }
