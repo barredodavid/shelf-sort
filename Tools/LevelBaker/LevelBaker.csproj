@@ -1,0 +1,14 @@
+<!-- Bakes Assets/Resources/levels.txt. Run from this folder with Unity's bundled SDK:
+     "C:\Program Files\Unity\Hub\Editor\6000.5.10f1\Editor\Data\DotNetSdk\dotnet.exe" run -c Release -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Assets\Scripts\LevelGen.cs" />
+  </ItemGroup>
+</Project>

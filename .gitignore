@@ -6,6 +6,9 @@
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
 *.csproj
+!Tools/**/*.csproj
+Tools/**/bin/
+Tools/**/obj/
 *.sln
 *.slnx
 .vs/

@@ -54,7 +54,7 @@ public static class Setup
         AssetDatabase.SaveAssets();
     }
 
-    // Batch check: every generated level holds exactly 3 of each item and has a free slot.
+    // Check: every baked level holds exactly 3 of each item, has a free slot and can be cleared.
     [MenuItem("Shelf Sort/Check Levels")]
     public static void CheckLevels()
     {
@@ -65,6 +65,7 @@ public static class Setup
             var items = lv.Shelves.SelectMany(s => s).SelectMany(r => r).Where(x => x >= 0);
             if (items.GroupBy(x => x).Any(g => g.Count() != 3)) throw new System.Exception($"Level {n}: bad item counts");
             if (lv.Shelves.All(s => s[0].All(x => x >= 0))) throw new System.Exception($"Level {n}: no free slot");
+            if (!LevelGen.Solvable(lv.Shelves)) throw new System.Exception($"Level {n}: not solvable");
         }
         Debug.Log("CheckLevels OK (200 levels)");
     }
