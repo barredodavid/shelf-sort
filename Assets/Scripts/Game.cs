@@ -38,7 +38,7 @@ public partial class Game : MonoBehaviour
     int coins, combo, undoLeft, shuffleLeft, timeLeft, moves, par;
     readonly HashSet<int> locked = new(); // shelves mid-animation (popping trio, row sliding forward): no picking or dropping there
     float time, total, lastMatch, toastUntil, overAt;
-    bool hard, busy, over, adUsed, won;
+    bool hard, busy, over, adUsed, won, started;
     string title, subtitle, toast;
     Camera cam;
     Transform root;
@@ -73,8 +73,8 @@ public partial class Game : MonoBehaviour
         ApplySound();
 
         coins = PlayerPrefs.GetInt("coins", 0);
-        world = PlayerPrefs.GetInt("world", 0); // the title screen shows the last played world's products
-        lvl = PlayerPrefs.GetInt("lvl", 0); // where the truck waits on the map
+        world = PlayerPrefs.GetInt("world", 0); // where the truck waits on the map
+        lvl = PlayerPrefs.GetInt("lvl", 0);
         Render();
     }
 
@@ -151,7 +151,7 @@ public partial class Game : MonoBehaviour
         locked.Clear();
         dragGo = null;
         dragS = -1;
-        busy = over = adUsed = won = usedBonus = false;
+        busy = over = adUsed = won = usedBonus = started = false;
         history.Clear();
         undoLeft = shuffleLeft = timeLeft = 1;
         combo = 0;
@@ -164,7 +164,7 @@ public partial class Game : MonoBehaviour
         var all = shelves.SelectMany(sh => sh).SelectMany(r => r).ToList();
         foreach (var (key, has, text) in new[]
                  {
-                     ("back", shelves.Any(sh => sh.Count > 1), "Les produits du fond avancent quand la rangée de devant est vide"),
+                     ("back", shelves.Any(sh => sh.Count > 1), "Les produits du fond avancent quand la rangée de devant est vide. Les cartons sur le côté : les rangées qui restent derrière"),
                      ("ice",all.Any(LevelGen.IsFrozen), "Produit gelé : pose 2 produits pareils à côté pour le libérer"),
                      ("box", all.Any(LevelGen.IsBoxed), "Carton mystère : attrape-le pour voir ce qu'il cache"),
                      ("crate", all.Contains(LevelGen.Crate), "Caisse : fais un trio sur une étagère voisine pour la casser"),
@@ -261,6 +261,15 @@ public partial class Game : MonoBehaviour
             Box(p + new Vector3(0, .11f + BackLift / 2, .55f), new Vector3(ShelfW, BackLift, .5f), WoodC * .9f); // riser: its top meets the back row's feet
 
             var sh = shelves[s];
+            // stock still waiting behind the visible back row: one taped carton per row, stacked against the outer post
+            int hidden = sh.Skip(2).Count(r => r.Any(x => x >= 0));
+            float postX = (s % 2 == 0 ? -1 : 1) * (UnitHalfW - .1f);
+            for (int k = 0; k < hidden; k++)
+            {
+                var at = new Vector3(postX, p.y + .11f + .13f + k * .27f, -.72f);
+                Box(at, new Vector3(.3f, .26f, .26f), new Color(.79f, .6f, .36f));
+                Box(at + new Vector3(0, 0, -.131f), new Vector3(.3f, .06f, .005f), new Color(.93f, .84f, .66f)); // tape
+            }
             for (int i = 0; i < 3; i++)
             {
                 if (sh[0][i] >= 0) views[(s, i)] = Item(sh[0][i], SlotPos(s, i), 1f, false, $"{s},{i}");
@@ -388,7 +397,7 @@ public partial class Game : MonoBehaviour
         AnimateHome();
         UpdateMap();
         TickStars();
-        if (!busy && !over && !Paused)
+        if (started && !busy && !over && !Paused)
         {
             time = Mathf.Max(0, time - Time.deltaTime);
             if (time <= 0) Lose("Temps écoulé !");
@@ -421,6 +430,7 @@ public partial class Game : MonoBehaviour
                 }
                 dragS = s;
                 dragI = i;
+                started = true; // the clock starts with the first product picked up
                 dragGo = views[(s, i)];
                 dragGo.transform.localScale = Vector3.one * 1.2f;
                 Fx.Play("pick");
@@ -731,20 +741,10 @@ public partial class Game : MonoBehaviour
             moves > par ? new Color(1f, .75f, .75f) : Color.white, true, TextAnchor.MiddleRight);
 
         var boardTop = cam.WorldToScreenPoint(new Vector3(0, BoardTopY + .3f, 0));
-        StoreFront(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20);
+        if (Time.time < tipUntil && !over) TipCard(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20); // a new obstacle explained, in the sign's place
+        else StoreFront(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20);
 
         // bonuses
-        // "+N" on the price strip: rows still hidden behind the visible back row
-        for (int s = 0; s < shelves.Count; s++)
-        {
-            int hidden = shelves[s].Skip(2).Count(r => r.Any(x => x >= 0));
-            if (hidden == 0) continue;
-            var c = ToGui(ShelfPos(s) + new Vector3(ShelfW / 2 - .4f, -.05f, -.83f));
-            var pill = new Rect(c.x - 45, c.y - 24, 90, 48);
-            Panel(pill, Ink);
-            Label(pill, $"+{hidden}", 32, Color.white);
-        }
-
         // bonuses: icon + what it does; spent or unusable ones turn grey, the badge says how many are left
         float bw = 300, bh = 150, by = bottom - bh;
         icons ??= new[] { Fx.Icon(0), Fx.Icon(1), Fx.Icon(2) };
@@ -761,14 +761,6 @@ public partial class Game : MonoBehaviour
         }
         GUI.enabled = true;
 
-        // new obstacle explained, over the bottom of the board
-        if (Time.time < tipUntil && !over)
-        {
-            var card = new Rect(40, by - 230, W - 80, 180);
-            Panel(card, Ink);
-            Label(new Rect(card.x, card.y + 12, card.width, 50), "NOUVEAU !", 40, Gold);
-            Label(new Rect(card.x + 30, card.y + 60, card.width - 60, 110), tip, 38, Color.white);
-        }
 
         if (Time.time < toastUntil)
         {
@@ -778,6 +770,16 @@ public partial class Game : MonoBehaviour
 
         if (over) EndCard(W, H, k);
         if (menu == Menu.Pause) PauseCard(W, H, k);
+    }
+
+    // "NOUVEAU !" card explaining an obstacle, filling the gap between the timer and the cabinets
+    void TipCard(float from, float to)
+    {
+        float h = Mathf.Clamp(to - from, 160, 240);
+        var card = new Rect(40, from + (to - from - h) / 2, 1000, h);
+        Panel(card, Ink);
+        Label(new Rect(card.x, card.y + 10, card.width, 50), "NOUVEAU !", 40, Gold);
+        Label(new Rect(card.x + 30, card.y + 58, card.width - 60, h - 70), tip, 36, Color.white);
     }
 
     // Shop sign + striped awning, centered in the gap between the timer and the cabinets.
