@@ -7,14 +7,11 @@ public partial class Game
 {
     const int LevelsPerWorld = 20;
 
-    // items: 12 products per world, index = item id. need: total stars to open the world.
+    // items: 12 products per world, index = item id (null pack: built by the Products factory). need: total stars
+    // to open the world.
     static readonly (string name, string pack, string[] items, int need, Color color)[] Worlds =
     {
-        ("Supérette", "Cute Supermarket Lite/Prefabs/", new[]
-        {
-            "bottle_small_red", "donut_red", "bottle1_water", "apple_green", "bottle2_pink", "can_food_blue",
-            "cream_jar_yellow", "dressing_mayo", "flask_coffee", "jam_purple", "roll_toilet", "watermelon_quart",
-        }, 0, new Color(.91f, .3f, .27f)),
+        ("Supérette", null, null, 0, new Color(.91f, .3f, .27f)),
         ("Boulangerie", "Kenney/", new[]
         {
             "donut-sprinkles", "cookie-chocolate", "cupcake", "croissant", "cake", "pie",
@@ -61,7 +58,22 @@ public partial class Game
 
     GameObject Model(int id)
     {
-        if (worldModels[world] == null)
+        if (worldModels[world] == null && Worlds[world].pack == null)
+        {
+            // procedural products carry their own textured materials: only the waiting-row silhouette is shared
+            // (frozen ones keep their own colors, the ice block says enough)
+            worldModels[world] = Enumerable.Range(0, Products.Count).Select(i =>
+            {
+                var p = Products.Make(i);
+                p.SetActive(false); // template, cloned by Item()
+                return p;
+            }).ToArray();
+            worldGhosts[world] = new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial)
+            {
+                color = new Color(.3f, .32f, .4f),
+            };
+        }
+        else if (worldModels[world] == null)
         {
             var w = Worlds[world];
             worldModels[world] = w.items.Select(f => Resources.Load<GameObject>(w.pack + f)).ToArray();

@@ -258,6 +258,8 @@ public partial class Game : MonoBehaviour
     GameObject Item(int id, Vector3 pos, float scale, bool ghost, string name)
     {
         var model = Instantiate(Model(LevelGen.Id(id)));
+        model.SetActive(true); // procedural templates are kept inactive
+        // null keeps the model's own materials (procedural products)
         var mat = ghost ? worldGhosts[world] : LevelGen.IsFrozen(id) ? worldIce[world] : worldMats[world];
         return Wrap(model, pos, scale, name, mat);
     }

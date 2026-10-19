@@ -55,11 +55,7 @@ public partial class Game
         Box(new Vector3(0, -.13f, -.81f), new Vector3(7.6f, .16f, .02f), Cream).transform.SetParent(heroRoot);
         for (int i = 0; i < HeroIds.Length; i++)
         {
-            var pos = new Vector3((i - 2) * 1.45f, 0, 0);
-            // ponytail: preview of a procedural product (Products.cs) in the middle; remove once the factory feeds the worlds
-            var t = (i == 2
-                ? Wrap(Products.Bottle(new Color(.16f, .06f, .04f), new Color(.86f, .13f, .13f), new Color(.86f, .13f, .13f), "SODA", .78f), pos, 1.3f, "hero", null)
-                : Item(HeroIds[i], pos, 1.3f, false, "hero")).transform;
+            var t = Item(HeroIds[i], new Vector3((i - 2) * 1.45f, 0, 0), 1.3f, false, "hero").transform;
             t.SetParent(heroRoot, false);
             heroes.Add(t);
         }
