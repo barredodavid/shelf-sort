@@ -3,14 +3,22 @@ using System.Linq;
 using UnityEngine;
 
 // A shelf is a list of rows of 3 slots, row 0 being the playable front and the rest waiting behind it.
-// A slot holds -1 (empty), a product id 0..11, or id + Frozen for a product stuck in ice: it can't be picked up
-// and only leaves when two matching products are brought next to it.
+// A slot holds -1 (empty), a product id 0..11, or:
+//  - id + Frozen: stuck in ice, can't be picked up, only leaves when two matching products are brought next to it;
+//  - id + Boxed: hidden in a "?" carton, opened when picked up (the solver knows what's inside, the player doesn't);
+//  - Crate: a wooden crate taking a front slot, broken by a trio cleared on a neighboring shelf.
 public static class LevelGen
 {
-    public const int Types = 12, Frozen = 100;
+    public const int Types = 12, Crate = 99, Frozen = 100, Boxed = 200;
 
-    public static int Id(int x) => x % Frozen;
-    public static bool IsFrozen(int x) => x >= Frozen;
+    public static int Id(int x) => x % 100;
+    public static bool IsFrozen(int x) => x >= Frozen && x < Boxed;
+    public static bool IsBoxed(int x) => x >= Boxed;
+    public static bool IsProduct(int x) => x >= 0 && x != Crate;
+    public static bool Movable(int x) => IsProduct(x) && !IsFrozen(x);
+
+    // shelves next to s in the 2-column unit: the other column, the row above, the row below
+    public static IEnumerable<int> Neighbors(int s, int count) => new[] { s ^ 1, s - 2, s + 2 }.Where(n => n >= 0 && n < count);
 
     public class Level
     {
@@ -50,7 +58,7 @@ public static class LevelGen
         foreach (var sh in lv.Shelves)
             foreach (var r in sh)
                 for (int k = 0; k < 3; k++)
-                    if (r[k] >= 0) r[k] = perm[Id(r[k])] + (IsFrozen(r[k]) ? Frozen : 0);
+                    if (IsProduct(r[k])) r[k] = perm[Id(r[k])] + (r[k] - Id(r[k])); // keeps the ice/box flag
         return lv;
     }
 
@@ -59,9 +67,9 @@ public static class LevelGen
         baked ??= Resources.Load<TextAsset>("levels").text.Split('\n', System.StringSplitOptions.RemoveEmptyEntries);
 
     // One level per line: "time;hard;par;shelf|shelf|..." where a shelf is rows joined by '/', one char per slot:
-    // 'a' empty, 'b'.. a product, 'B'.. the same product frozen
-    static char Char(int x) => x < 0 ? 'a' : (char)((IsFrozen(x) ? 'B' : 'b') + Id(x));
-    static int FromChar(char c) => c == 'a' ? -1 : char.IsUpper(c) ? c - 'B' + Frozen : c - 'b';
+    // 'a' empty, 'b'..'m' a product, 'B'..'M' the same product frozen, 'n'..'y' boxed, 'z' a crate
+    static char Char(int x) => x < 0 ? 'a' : x == Crate ? 'z' : (char)((IsFrozen(x) ? 'B' : IsBoxed(x) ? 'n' : 'b') + Id(x));
+    static int FromChar(char c) => c == 'a' ? -1 : c == 'z' ? Crate : char.IsUpper(c) ? c - 'B' + Frozen : c >= 'n' ? c - 'n' + Boxed : c - 'b';
 
     public static string Encode(Level lv) =>
         $"{lv.Time.ToString(System.Globalization.CultureInfo.InvariantCulture)};{(lv.Hard ? 1 : 0)};{lv.Par};" +
@@ -85,27 +93,35 @@ public static class LevelGen
         bool hard = n % 5 == 0;
         int T = Mathf.Min(3 + (int)(n * .8f) + (hard ? 2 : 0), Types);
         int E = hard ? 2 : n < 4 ? 4 : 3;
-        int ice = n < 8 ? 0 : Mathf.Min(1 + (n - 8) / 8, 4); // frozen products from level 8, one more every 8 levels
+        // obstacles, one new kind per stretch of levels, then more of them
+        int ice = n < 8 ? 0 : Mathf.Min(1 + (n - 8) / 8, 4); // frozen products from level 8
+        int boxes = n < 14 ? 0 : Mathf.Min(1 + (n - 14) / 6, 5); // "?" cartons from level 14
+        int crates = n < 24 ? 0 : Mathf.Min(1 + (n - 24) / 12, 3); // wooden crates from level 24
         // always 6 shelves (3 rows x 2) so the shelving unit fills the screen; difficulty grows through hidden rows instead
         const int S = 6, F = S * 3;
-        int L = Mathf.CeilToInt((3f * T + E) / F);
+        int L = Mathf.CeilToInt((3f * T + E + crates) / F);
 
         // random deals, kept only when the solver finds a way through
         while (true)
         {
             var kinds = Shuffle(Enumerable.Range(0, Types).ToList(), rng).Take(T);
             var items = Shuffle(kinds.SelectMany(k => new[] { k, k, k }).ToList(), rng);
-            int nf = Mathf.Min(items.Count, F - E);
-            var front = Chunk(Shuffle(items.Take(nf).Concat(Enumerable.Repeat(-1, F - nf)).ToList(), rng));
-            if (front.Any(Triple)) continue;
+            int nf = Mathf.Min(items.Count, F - E - crates); // crates take front slots: their products wait behind
+            var front = Chunk(Shuffle(items.Take(nf).Concat(Enumerable.Repeat(Crate, crates)).Concat(Enumerable.Repeat(-1, F - nf - crates)).ToList(), rng));
+            if (front.Any(Triple) || front.Any(r => r.Count(x => x == Crate) > 1)) continue;
 
             // freeze some front products; a shelf with two different frozen products could never be completed
-            var cells = Shuffle(Enumerable.Range(0, F).Where(c => front[c / 3][c % 3] >= 0).ToList(), rng);
+            var cells = Shuffle(Enumerable.Range(0, F).Where(c => IsProduct(front[c / 3][c % 3])).ToList(), rng);
             foreach (int c in cells.Take(ice)) front[c / 3][c % 3] += Frozen;
             if (front.Any(r => r.Where(IsFrozen).Select(Id).Distinct().Count() > 1)) continue;
 
             var rest = items.Skip(nf).ToList();
             var back = Chunk(Shuffle(rest.Concat(Enumerable.Repeat(-1, F * (L - 1) - rest.Count)).ToList(), rng));
+
+            // hide some products in cartons, front or back
+            var plain = Shuffle(front.Concat(back).SelectMany(r => Enumerable.Range(0, 3).Select(k => (r, k)))
+                .Where(c => c.r[c.k] >= 0 && c.r[c.k] < Types).ToList(), rng);
+            foreach (var (r, k) in plain.Take(boxes)) r[k] += Boxed;
 
             var shelves = new List<List<int[]>>();
             for (int i = 0; i < S; i++)
@@ -125,7 +141,8 @@ public static class LevelGen
                 Shelves = shelves,
                 Time = Mathf.Round((25 + T * 7) * (hard ? .85f : 1f)),
                 Hard = hard,
-                Par = moves + 1 + moves / 8, // a little slack: a careful player can make it, a hasty one can't
+                // a little slack: a careful player can make it, a hasty one can't; cartons hide what the solver saw
+                Par = moves + 1 + moves / 8 + (boxes + 1) / 2,
             };
         }
     }
@@ -136,7 +153,7 @@ public static class LevelGen
 
     public static bool Cleared(List<List<int[]>> b) => b.All(sh => sh.All(r => r.All(x => x < 0)));
 
-    // Same order as the game: bring hidden rows forward, clear trios, repeat until nothing changes
+    // Same order as the game: bring hidden rows forward, clear trios (breaking crates next door), repeat until stable
     static void Settle(List<List<int[]>> b)
     {
         bool changed = true;
@@ -144,11 +161,21 @@ public static class LevelGen
         {
             changed = false;
             foreach (var sh in b)
-            {
                 while (sh.Count > 1 && sh[0].All(x => x < 0)) { sh.RemoveAt(0); changed = true; }
-                if (Triple(sh[0])) { sh[0] = new[] { -1, -1, -1 }; changed = true; }
-            }
+            var hits = Enumerable.Range(0, b.Count).Where(s => Triple(b[s][0])).ToList();
+            foreach (int s in hits) b[s][0] = new[] { -1, -1, -1 };
+            BreakCrates(b, hits);
+            changed |= hits.Count > 0;
         }
+    }
+
+    // crates on the front rows next to the cleared shelves break; returns the (shelf, slot) of each one
+    public static List<(int s, int i)> BreakCrates(List<List<int[]>> b, List<int> cleared)
+    {
+        var broken = cleared.SelectMany(s => Neighbors(s, b.Count)).Distinct()
+            .SelectMany(n => Enumerable.Range(0, 3).Where(i => b[n][0][i] == Crate).Select(i => (n, i))).ToList();
+        foreach (var (s, i) in broken) b[s][0][i] = -1;
+        return broken;
     }
 
     public static bool Solvable(List<List<int[]>> start) => Solve(start) >= 0;
@@ -177,9 +204,9 @@ public static class LevelGen
                     for (int i = 0; i < 3; i++)
                     {
                         int x = b[s][0][i];
-                        if (x < 0 || IsFrozen(x)) continue;
-                        int same = b[t][0].Count(y => y >= 0 && Id(y) == x);
-                        moves.Add((s, i, t, j, same * same * 3 - b[s][0].Count(y => y >= 0 && Id(y) == x)));
+                        if (!Movable(x)) continue;
+                        int same = b[t][0].Count(y => IsProduct(y) && Id(y) == Id(x));
+                        moves.Add((s, i, t, j, same * same * 3 - b[s][0].Count(y => IsProduct(y) && Id(y) == Id(x))));
                     }
                 }
             }
@@ -222,7 +249,7 @@ public static class LevelGen
                         for (int i = 0; i < 3; i++)
                         {
                             int x = b[s][0][i];
-                            if (x < 0 || IsFrozen(x)) continue;
+                            if (!Movable(x)) continue;
                             var nb = Clone(b);
                             nb[t][0][j] = x;
                             nb[s][0][i] = -1;

@@ -10,7 +10,7 @@ for (int n = 2; n < 2 + Count; n++)
 {
     var line = LevelGen.Encode(LevelGen.Generate(n, rng));
     var back = LevelGen.Decode(line);
-    if (back.Shelves.SelectMany(s => s).SelectMany(r => r).Where(x => x >= 0).GroupBy(LevelGen.Id).Any(g => g.Count() != 3))
+    if (back.Shelves.SelectMany(s => s).SelectMany(r => r).Where(LevelGen.IsProduct).GroupBy(LevelGen.Id).Any(g => g.Count() != 3))
         throw new Exception($"Level {n}: bad item counts");
     if (!LevelGen.Solvable(back.Shelves)) throw new Exception($"Level {n}: not solvable after decode");
     lines.Add(line);
@@ -18,9 +18,9 @@ for (int n = 2; n < 2 + Count; n++)
 var path = Path.GetFullPath(Path.Combine("..", "..", "Assets", "Resources", "levels.txt"));
 File.WriteAllText(path, string.Join("\n", lines) + "\n");
 Console.WriteLine($"Baked {Count} levels in {sw.ElapsedMilliseconds} ms -> {path}");
-foreach (int n in new[] { 2, 7, 8, 9, 20, 40, 80 }.Where(n => n - 2 < lines.Count))
+foreach (int n in new[] { 2, 8, 14, 20, 24, 40, 80, 150 }.Where(n => n - 2 < lines.Count))
 {
     var lv = LevelGen.Decode(lines[n - 2]);
-    int ice = lv.Shelves.SelectMany(s => s).SelectMany(r => r).Count(LevelGen.IsFrozen);
-    Console.WriteLine($"  level {n}: par {lv.Par}, {ice} frozen, {lv.Time}s");
+    var all = lv.Shelves.SelectMany(s => s).SelectMany(r => r).ToList();
+    Console.WriteLine($"  level {n}: par {lv.Par}, {all.Count(LevelGen.IsFrozen)} frozen, {all.Count(LevelGen.IsBoxed)} boxed, {all.Count(x => x == LevelGen.Crate)} crates, {lv.Time}s");
 }

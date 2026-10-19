@@ -89,7 +89,7 @@ public static class Setup
         for (int n = 1; n <= 200; n++)
         {
             var lv = LevelGen.Make(n, rng);
-            var items = lv.Shelves.SelectMany(s => s).SelectMany(r => r).Where(x => x >= 0);
+            var items = lv.Shelves.SelectMany(s => s).SelectMany(r => r).Where(LevelGen.IsProduct);
             if (items.GroupBy(LevelGen.Id).Any(g => g.Count() != 3)) throw new System.Exception($"Level {n}: bad item counts");
             if (lv.Shelves.All(s => s[0].All(x => x >= 0))) throw new System.Exception($"Level {n}: no free slot");
             if (!LevelGen.Solvable(lv.Shelves)) throw new System.Exception($"Level {n}: not solvable");
