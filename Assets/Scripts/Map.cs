@@ -138,9 +138,9 @@ public partial class Game
         var landmarks = new List<Vector3>();
         for (int w = 0; w < Worlds.Length; w++)
         {
-            float t = w == 0 ? -2.3f : GateT(w) + .25f;
+            float t = w == 0 ? -2.3f : GateT(w) + .1f; // beside the gate: the first shop stands ~4.6 further on
             var p = MapPos(t);
-            var at = new Vector3(MapO.x + (p.x > MapO.x ? -1 : 1) * (w == 2 ? 3f : 2.5f), 0, p.z + (w == 2 ? .8f : 0));
+            var at = new Vector3(MapO.x + (p.x > MapO.x ? -1 : 1) * (w == 0 ? 2.5f : 3f), 0, p.z);
             var lm = Products.Landmark(w).transform;
             lm.SetParent(mapRoot);
             lm.position = at;

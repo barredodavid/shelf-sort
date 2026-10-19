@@ -6,7 +6,7 @@ using UnityEngine;
 // products (one per country); "JOUER" leads to the map (Map.cs).
 public partial class Game
 {
-    enum Menu { None, Home, Pause, Map }
+    enum Menu { None, Home, Pause, Map, Catalog }
 
     Menu menu = Menu.Home;
     float menuAt;
@@ -87,6 +87,7 @@ public partial class Game
         float y = safeTop + ah + sw / 2 + 30;
 
         if (Button(new Rect(40, y, 250, 96), SoundOn ? "Son : oui" : "Son : non", Mist, 38)) ToggleSound();
+        if (Application.isEditor && Button(new Rect(40, y + 116, 250, 80), "Catalogue", Mist, 34)) OpenMenu(Menu.Catalog); // editor only: review every product
         CoinsButton(W - 290, y, true);
 
         // logo, tilted like a hand-painted shop sign

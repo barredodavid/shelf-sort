@@ -15,14 +15,14 @@ public static partial class Products
         1 => Croissant(),
         2 => Macaron(),
         3 => Eclair(),
-        4 => Tarte(),
-        5 => Miche(),
-        6 => Cheese(),
-        7 => Gateau(),
+        4 => Wine(),
+        5 => PainAuChocolat(),
+        6 => CremeBrulee(),
+        7 => Caneles(),
         8 => Camembert(),
-        9 => Jar("CONFITURE", content: C("#c2183a"), lid: C("#e8e3dc"), label: C("#ffe3ea"), ink: C("#c2183a")),
-        10 => Bottle("EAU", liquid: C("#bfe9ff"), label: C("#1e88d8"), cap: C("#ffffff"), fill: .82f),
-        _ => Carton("LAIT", body: C("#fbfbf7"), accent: C("#2f7ae5")),
+        9 => Saucisson(),
+        10 => Moutarde(),
+        _ => Confiture(),
     };
 
     static GameObject Italy(int id) => id switch
@@ -53,7 +53,7 @@ public static partial class Products
         7 => Takoyaki(),
         8 => Tempura(),
         9 => Gyoza(),
-        10 => Bottle("RAMUNE", liquid: C("#d6f3ff"), label: C("#2f7ae5"), cap: C("#2f7ae5"), fill: .8f),
+        10 => Ramune(),
         _ => Edamame(),
     };
 
@@ -161,7 +161,8 @@ public static partial class Products
     }
 
     // Tube along path(t), t 0..1, round section of radius(t) squashed vertically by flat. u runs around, v along.
-    static Mesh Sweep(System.Func<float, Vector3> path, System.Func<float, float> radius, float flat, int rings = 64, int sides = 20)
+    // square < 1 squares the section off (a rounded rectangle instead of an ellipse).
+    static Mesh Sweep(System.Func<float, Vector3> path, System.Func<float, float> radius, float flat, int rings = 64, int sides = 20, float square = 1)
     {
         var verts = new List<Vector3>();
         var uvs = new List<Vector2>();
@@ -174,7 +175,10 @@ public static partial class Products
             for (int j = 0; j <= sides; j++)
             {
                 float th = 2 * Mathf.PI * j / sides, r = radius(t);
-                verts.Add(path(t) + side * Mathf.Cos(th) * r + Vector3.up * Mathf.Sin(th) * r * flat);
+                float c = Mathf.Cos(th), s = Mathf.Sin(th);
+                c = Mathf.Sign(c) * Mathf.Pow(Mathf.Abs(c), square);
+                s = Mathf.Sign(s) * Mathf.Pow(Mathf.Abs(s), square);
+                verts.Add(path(t) + side * c * r + Vector3.up * s * r * flat);
                 uvs.Add(new Vector2((float)j / sides, t));
             }
         }
@@ -188,17 +192,29 @@ public static partial class Products
         return Finish(verts, uvs, tris);
     }
 
+    // baguette: long, slightly uneven, golden crust browner on the sides, flour dusting, five opened score cuts
     static GameObject Baguette()
     {
         var root = new GameObject("Baguette");
+        const float L = 1.83f, R = .13f;
         // lying along X: the spun axis is turned 90°, so u = 0 (local +X) ends up on top
-        Spin(root, P(0, 0, .08f, .02f, .14f, .1f, .16f, .25f, .16f, 1.35f, .14f, 1.5f, .08f, 1.58f, 0, 1.6f),
+        Spin(root, P(0, 0, .06f, .015f, .11f, .06f, .13f, .15f, .135f, .4f, .128f, .9f, .135f, 1.4f, .13f, 1.65f, .11f, 1.75f, .06f, 1.81f, 0, L),
             Paint((u, v) =>
             {
                 float up = Mathf.Cos(u * Mathf.PI * 2);
-                if (up > .4f && Mathf.Repeat(v * 5 + u * 3, 1) < .14f) return C("#f2cf8a"); // slashes on top
-                return C("#c8812f") * (up < -.5f ? .85f : 1f);
-            }, .35f), new(.8f, .16f, 0), new(0, 0, 90));
+                float around = (Mathf.Repeat(u + .5f, 1) - .5f) * 2 * Mathf.PI * R; // arc length from the top
+                for (int k = 0; k < 5; k++) // score cuts: diagonal slits, pale crumb inside a dark rim
+                {
+                    float along = (v - (.16f + k * .17f)) * L;
+                    float s = along * .87f + around * .5f, t = -along * .5f + around * .87f;
+                    float e = s * s / (.13f * .13f) + t * t / (.035f * .035f);
+                    if (e < 1) return C("#efd29a");
+                    if (e < 1.6f) return C("#8a4a18");
+                }
+                if (Dot(u, v, 20, 60, .12f, .25f, 11, out _)) return C("#f3e6cf"); // flour
+                var crust = up > .2f ? C("#d4913c") : up > -.5f ? C("#b8702e") : C("#e3b877");
+                return crust * (.88f + .2f * Mathf.PerlinNoise(u * 18, v * 40));
+            }, .4f, 256), new(L / 2, R, 0), new(0, 0, 90));
         return root;
     }
 
@@ -214,14 +230,26 @@ public static partial class Products
         return root;
     }
 
+    // two macarons: a pink one, a pistachio one leaning on it
     static GameObject Macaron()
     {
         var root = new GameObject("Macaron");
-        var shell = Plain(C("#a8d98a"), .2f);
-        Spin(root, P(0, 0, .3f, 0, .33f, .05f, .3f, .12f, 0, .12f), shell);
-        Spin(root, P(0, .12f, .28f, .12f, .28f, .17f, 0, .17f), Plain(C("#fff4e0"), .2f));
-        Spin(root, P(0, .17f, .3f, .17f, .33f, .22f, .3f, .29f, 0, .29f), shell);
+        MacaronAt(root, C("#f6a5c0"), C("#fff4e0"), new(-.22f, 0, -.12f), default);
+        MacaronAt(root, C("#a8d98a"), C("#fff4e0"), new(.24f, .05f, .02f), new(0, 30, -16)); // leaning on the pink one
         return root;
+    }
+
+    // one macaron (diameter ~.5): glossy domed shells, each sitting on its ruffled "foot", a ring of filling between
+    static void MacaronAt(GameObject root, Color shell, Color filling, Vector3 pos, Vector3 euler)
+    {
+        var m = Tilted(root, euler, pos);
+        var glossy = Plain(shell, .55f);
+        var foot = Plain(shell * 1.08f, .2f);
+        Spin(m, P(0, 0, .22f, 0, .25f, .03f, 0, .03f), glossy); // bottom shell's flat underside
+        Spin(m, P(.25f, .03f, .265f, .05f, .25f, .08f), foot, ribs: 40, ribAmp: .06f);
+        Spin(m, P(0, .08f, .235f, .08f, .235f, .14f, 0, .14f), Plain(filling, .3f));
+        Spin(m, P(.25f, .14f, .265f, .17f, .25f, .19f), foot, ribs: 40, ribAmp: .06f);
+        Spin(m, P(0, .19f, .25f, .19f, .245f, .22f, .2f, .27f, .1f, .3f, 0, .305f), glossy); // top dome
     }
 
     static GameObject Cookie()
@@ -262,12 +290,22 @@ public static partial class Products
         return root;
     }
 
+    // éclair: crackled golden choux pastry, glossy chocolate glaze dripping in waves down the sides, a piped white line
     static GameObject Eclair()
     {
         var root = new GameObject("Eclair");
-        Spin(root, P(0, 0, .07f, .01f, .12f, .06f, .13f, .15f, .13f, .75f, .12f, .84f, .07f, .89f, 0, .9f),
-            Paint((u, v) => Mathf.Cos(u * Mathf.PI * 2) > .15f ? C("#4a2716") : C("#e0a860"), .45f), // chocolate on top
-            new(.45f, .13f, 0), new(0, 0, 90));
+        Spin(root, P(0, 0, .07f, .01f, .12f, .06f, .13f, .15f, .135f, .45f, .13f, .75f, .12f, .84f, .07f, .89f, 0, .9f), Paint((u, v) =>
+        {
+            float up = Mathf.Cos(u * Mathf.PI * 2), around = Mathf.Repeat(u + .5f, 1) - .5f;
+            float edge = .12f - .06f * Mathf.Abs(Mathf.Sin(v * Mathf.PI * 7)); // glaze on the top half, a softly wavy edge
+            if (up > edge)
+            {
+                if (v > .12f && v < .88f && Mathf.Abs(around - .035f * Mathf.Sin(v * 60)) < .01f) return C("#fbf3e4"); // piped line
+                return C("#2a1a12"); // dark chocolate glaze
+            }
+            float n = Mathf.PerlinNoise(u * 30, v * 60);
+            return Mathf.Abs(n - .5f) < .02f ? C("#d1a05a") : Color.Lerp(C("#e8bc72"), C("#f5d595"), n); // crackled choux, pale gold
+        }, .55f, 256), new(.45f, .12f, 0), new(0, 0, 90), scale: new(1, 1, 1.12f));
         return root;
     }
 

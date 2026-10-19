@@ -55,7 +55,26 @@ public static partial class Products
             : v >= labelLo && v <= labelHi ? (Mathf.Abs((v - labelLo) / (labelHi - labelLo) - .5f) > .43f ? cream : label)
             : (v < fill ? liquid : clear) * Sheen(u));
         LatheText(cv, name, 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2 * H, (labelHi - labelLo) * H * .55f, Color.white);
-        return Spun("Bottle", BottleProfile, cv, .6f);
+        return Spun(name, BottleProfile, cv, .6f);
+    }
+
+    // Bordeaux bottle: dark green glass, red wine, burgundy foil capsule, cream label with a gold frame
+    static GameObject Wine()
+    {
+        const float H = 1.42f, R = .27f, capFrom = 1.2f / H, labelLo = .2f, labelHi = .52f;
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) =>
+        {
+            if (v >= capFrom) return C("#6e1428") * (.85f + .25f * Sheen(u).r);
+            if (v >= labelLo && v <= labelHi)
+            {
+                float f = (v - labelLo) / (labelHi - labelLo);
+                return f < .07f || f > .93f ? C("#c9a24a") : C("#f4ead2");
+            }
+            return C("#1f3a24") * Sheen(u);
+        });
+        LatheText(cv, "VIN", 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2 * H, (labelHi - labelLo) * H * .5f, C("#6e1428"));
+        return Spun("VIN", P(0, 0, .25f, 0, .27f, .03f, .27f, .82f, .25f, .9f, .15f, .99f, .1f, 1.06f, .1f, 1.36f, .105f, 1.4f, 0, 1.42f), cv, .75f);
     }
 
     static GameObject Jar(string name, Color content, Color lid, Color label, Color ink)
@@ -67,7 +86,7 @@ public static partial class Products
             : v >= labelLo && v <= labelHi ? (Mathf.Abs((v - labelLo) / (labelHi - labelLo) - .5f) > .4f ? ink : label)
             : content * Sheen(u));
         LatheText(cv, name, 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2 * H, (labelHi - labelLo) * H * .5f, ink);
-        return Spun("Jar", JarProfile, cv, .45f);
+        return Spun(name, JarProfile, cv, .45f);
     }
 
     static GameObject Carton(string name, Color body, Color accent)
@@ -79,7 +98,7 @@ public static partial class Products
             : v < .18f * BoxSide || Mathf.Abs(v - .8f * BoxSide) < .02f ? accent // bottom band, thin top line
             : body);
         BoxText(cv, name, w, d, h, .5f, .2f, accent);
-        return Built("Carton", BoxMesh(w, h, d, gable), cv, .3f);
+        return Built(name, BoxMesh(w, h, d, gable), cv, .3f);
     }
 
     static GameObject CerealBox(string name, Color main, Color accent, Color cereal)
@@ -104,7 +123,7 @@ public static partial class Products
             return main;
         });
         BoxText(cv, name, w, d, h, .7f, .2f, Color.white, Darker(main));
-        return Built("CerealBox", BoxMesh(w, h, d, 0), cv, .3f);
+        return Built(name, BoxMesh(w, h, d, 0), cv, .3f);
     }
 
     // half-dozen eggs in an open grey cardboard tray, 2 rows of 3
@@ -270,7 +289,8 @@ public static partial class Products
     // Spins a profile around Y. u runs around the axis, v up the height, so a texture paints it like a label.
     // ribs/ribAmp modulate the radius around the axis (pumpkin lobes, paper-cup pleats). A profile that loops
     // without touching the axis gives a torus (donut).
-    static Mesh Lathe(Vector2[] profile, int segments, int ribs = 0, float ribAmp = 0)
+    // startDeg/spanDeg: spin only part of the way round (a cheese with a slice cut out, or the slice itself)
+    static Mesh Lathe(Vector2[] profile, int segments, int ribs = 0, float ribAmp = 0, float startDeg = 0, float spanDeg = 360)
     {
         float lo = profile.Min(p => p.y), span = Mathf.Max(profile.Max(p => p.y) - lo, 1e-4f); // v: 0 lowest, 1 highest
         var verts = new List<Vector3>();
@@ -279,7 +299,7 @@ public static partial class Products
         for (int p = 0; p < profile.Length; p++)
             for (int s = 0; s <= segments; s++) // one extra column: the texture seam needs its own vertices
             {
-                float a = 2 * Mathf.PI * s / segments;
+                float a = (startDeg + spanDeg * s / segments) * Mathf.Deg2Rad;
                 float r = profile[p].x * (1 + ribAmp * Mathf.Cos(ribs * a));
                 verts.Add(new Vector3(Mathf.Cos(a) * r, profile[p].y, Mathf.Sin(a) * r));
                 uvs.Add(new Vector2((float)s / segments, (profile[p].y - lo) / span));

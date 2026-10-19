@@ -164,7 +164,7 @@ public partial class Game : MonoBehaviour
         var all = shelves.SelectMany(sh => sh).SelectMany(r => r).ToList();
         foreach (var (key, has, text) in new[]
                  {
-                     ("back", shelves.Any(sh => sh.Count > 1), "Les produits du fond avancent quand la rangée de devant est vide. Les cartons sur le côté : les rangées qui restent derrière"),
+                     ("back", shelves.Any(sh => sh.Count > 1), "Les produits du fond avancent quand la rangée de devant est vide"),
                      ("ice",all.Any(LevelGen.IsFrozen), "Produit gelé : pose 2 produits pareils à côté pour le libérer"),
                      ("box", all.Any(LevelGen.IsBoxed), "Carton mystère : attrape-le pour voir ce qu'il cache"),
                      ("crate", all.Contains(LevelGen.Crate), "Caisse : fais un trio sur une étagère voisine pour la casser"),
@@ -238,6 +238,11 @@ public partial class Game : MonoBehaviour
             RenderHome();
             return;
         }
+        if (menu == Menu.Catalog)
+        {
+            RenderCatalog();
+            return;
+        }
         if (menu == Menu.Map)
         {
             BuildMap(); // the camera moves over to it in UpdateMap
@@ -261,15 +266,6 @@ public partial class Game : MonoBehaviour
             Box(p + new Vector3(0, .11f + BackLift / 2, .55f), new Vector3(ShelfW, BackLift, .5f), WoodC * .9f); // riser: its top meets the back row's feet
 
             var sh = shelves[s];
-            // stock still waiting behind the visible back row: one taped carton per row, stacked against the outer post
-            int hidden = sh.Skip(2).Count(r => r.Any(x => x >= 0));
-            float postX = (s % 2 == 0 ? -1 : 1) * (UnitHalfW - .1f);
-            for (int k = 0; k < hidden; k++)
-            {
-                var at = new Vector3(postX, p.y + .11f + .13f + k * .27f, -.72f);
-                Box(at, new Vector3(.3f, .26f, .26f), new Color(.79f, .6f, .36f));
-                Box(at + new Vector3(0, 0, -.131f), new Vector3(.3f, .06f, .005f), new Color(.93f, .84f, .66f)); // tape
-            }
             for (int i = 0; i < 3; i++)
             {
                 if (sh[0][i] >= 0) views[(s, i)] = Item(sh[0][i], SlotPos(s, i), 1f, false, $"{s},{i}");
@@ -718,6 +714,7 @@ public partial class Game : MonoBehaviour
         {
             case Menu.Home: HomeScreen(W, H, k, top - 30, bottom); return;
             case Menu.Map: MapScreen(W, H, top - 30, bottom); return;
+            case Menu.Catalog: CatalogScreen(W, H, top - 30); return;
         }
         bool live = !busy && !over && menu == Menu.None;
 
