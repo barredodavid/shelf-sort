@@ -224,6 +224,10 @@ public static partial class Products
             2 => new Vector2((u - .5f) * 1.5f, v - .5f).magnitude < .3f ? C("#d7282f") : Color.white,
             _ => u < .42f && v > .46f ? C("#27407a") : (int)(v * 7) % 2 == 0 ? C("#c8282e") : Color.white,
         }, .2f);
+        // lit from within a little: the cloth faces the camera, side-on to the light, and would look dull
+        flag.EnableKeyword("_EMISSION");
+        flag.SetTexture("_EmissionMap", flag.mainTexture);
+        flag.SetColor("_EmissionColor", Color.white * .45f);
         const int N = 10;
         float fw = .4f, fh = .27f, top = .5f;
         var verts = new List<Vector3>();

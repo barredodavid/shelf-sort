@@ -10,9 +10,9 @@ public partial class Game
     const float GlobeR = 2.6f, FlightTime = 2.4f;
     // each country's pin: latitude, longitude
     static readonly Vector2[] Places = { new(46.5f, 2.5f), new(42.5f, 12.5f), new(36f, 138f), new(39f, -98f) };
-    // degrees each pole leans north (not the current country's): France and Italy are neighbours, their flags lean
-    // apart so neither hides the other
-    static readonly float[] Lean = { 25, -25, 0, 0 };
+    // where each pole leans, in degrees of latitude/longitude (not the current country's): France and Italy are
+    // neighbours, France's flag leans north and Italy's east so neither hides the other, seen from anywhere
+    static readonly Vector2[] Lean = { new(25, 0), new(0, 35), default, default };
 
     Transform globe, plane3D;
     readonly Transform[] pins = new Transform[Places.Length];
@@ -134,7 +134,8 @@ public partial class Game
         for (int w = 0; w < pins.Length; w++)
         {
             var pin = pins[w];
-            var up = globe.rotation * Dir(Places[w].x + (w == mapWorld ? 0 : Lean[w]), Places[w].y); // ours stands straight
+            var p = Places[w] + (w == mapWorld ? default : Lean[w]); // ours stands straight
+            var up = globe.rotation * Dir(p.x, p.y);
             pin.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(Vector3.forward, up), up);
         }
     }
