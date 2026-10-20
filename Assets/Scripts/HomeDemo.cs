@@ -7,7 +7,7 @@ using UnityEngine;
 //   p = [x, x, _]   q = [y, x, y]   r = [z, z, y]
 // q's x goes to p (trio of x pops), then r's y goes to q (trio of y pops), leaving r = [z, z, _]. The two emptied
 // compartments are restocked as q' = [y', z, y'] and r' = [w, w, y'], and r becomes the next p.
-// Products are drawn from all four countries.
+// Products are the current country's.
 public partial class Game
 {
     Transform heroRoot;
@@ -34,13 +34,28 @@ public partial class Game
         void Part(Vector3 pos, Vector3 size, Color c) => Box(pos, size, c).transform.SetParent(heroRoot);
         Part(new Vector3(0, .62f, .7f), new Vector3(7.6f, 1.5f, .1f), BackboardC);
         Part(new Vector3(0, -.11f, 0), new Vector3(7.6f, .22f, 1.4f), WoodC);
-        Part(new Vector3(0, -.13f, -.71f), new Vector3(7.6f, .16f, .02f), Cream);
+        Part(new Vector3(0, -.13f, -.71f), new Vector3(7.6f, .16f, .02f), Worlds[world].color); // price strip in the country's colour
+        Part(new Vector3(0, 1.24f, .64f), new Vector3(7.6f, .2f, .02f), BackboardC * .8f); // shadow under the top plank
+        var led = Box(new Vector3(0, 1.3f, -.62f), new Vector3(7.4f, .05f, .05f), Color.white); // strip light along the top plank
+        led.transform.SetParent(heroRoot);
+        var glow = led.GetComponent<Renderer>().material;
+        glow.EnableKeyword("_EMISSION");
+        glow.SetColor("_EmissionColor", new Color(1f, .97f, .88f) * 1.5f);
         for (int c = 0; c < 3; c++)
             for (int i = 0; i < 3; i++)
                 Part(DemoSlot(c, i) + new Vector3(0, -.13f, -.73f), new Vector3(.3f, .1f, .02f), TagC);
         foreach (float x in new[] { -3.7f, -1.225f, 1.225f, 3.7f }) // posts between the compartments
             Part(new Vector3(x, .62f, 0), new Vector3(.16f, 1.5f, 1.4f), WoodC);
         Part(new Vector3(0, 1.42f, 0), new Vector3(7.8f, .2f, 1.5f), WoodC * .85f);
+        // the country on top of the shelf: its flag on the left, a souvenir model of its monument on the right
+        var flag = Products.FlagPin(world).transform;
+        flag.SetParent(heroRoot, false);
+        flag.localPosition = new Vector3(-3.15f, 1.52f, 0);
+        flag.localScale = Vector3.one * 1.7f;
+        var landmark = Products.Landmark(world).transform;
+        landmark.SetParent(heroRoot, false);
+        landmark.localPosition = new Vector3(2.85f, 1.52f, .15f);
+        landmark.localScale = Vector3.one * (world == 2 ? .2f : .3f); // Fuji is wide
         AnimateHome();
         homeDemo = StartCoroutine(HomeDemo());
     }
@@ -55,7 +70,7 @@ public partial class Game
     {
         while (true)
         {
-            var p = (Random.Range(0, Worlds.Length), Random.Range(0, Products.Count));
+            var p = (world, Random.Range(0, Products.Count)); // the current country's products
             if (System.Array.IndexOf(not, p) < 0) return p;
         }
     }

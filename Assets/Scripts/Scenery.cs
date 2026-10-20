@@ -8,6 +8,27 @@ public static partial class Products
     // each world's ground and its decor
     public static Color Ground(int w) => C(new[] { "#9ad66f", "#cfd88a", "#a9dc8f", "#ecc98f" }[w]); // a method: C() needs hexCache, which may not be initialized yet in a static field
 
+    // the land of a country map, width x length world units: France a park lawn with mowing stripes, Italy a patchwork
+    // of wheat, olive and meadow fields, Japan moss with flooded rice paddies, the USA desert sand with dry patches
+    public static Material GroundMat(int w, float width, float length) => Paint((u, v) =>
+    {
+        float x = u * width, z = v * length;
+        float cell = Mathf.Abs(Mathf.Sin(Mathf.Floor(x / 4) * 12.9898f + Mathf.Floor(z / 5) * 78.233f) * 43758.5453f) % 1;
+        float n = Mathf.PerlinNoise(x * .12f, z * .12f);
+        switch (w)
+        {
+            case 0: return Color.Lerp((int)(z / 1.5f) % 2 == 0 ? C("#92d066") : C("#9ed973"), C("#86c45e"), n * .4f);
+            case 1:
+                var field = C(new[] { "#e2cb6c", "#b8c97a", "#cfd88a", "#a9bf68", "#d9d27a" }[(int)(cell * 5)]);
+                return field * (Mathf.Repeat(z * 1.2f, 1) < .2f ? .94f : 1f); // ploughed rows
+            case 2:
+                if (cell < .35f) return Mathf.Repeat(x * 1.5f, 1) < .25f ? C("#8fcf7a") : C("#a8d9b8"); // paddy: water between the rows
+                return Color.Lerp(C("#a9dc8f"), C("#94cc7a"), n);
+            default:
+                return Color.Lerp(C("#efcd94"), C("#d9a46a"), n * n * 1.6f) * (Mathf.PerlinNoise(x * .8f, z * .8f) > .72f ? .9f : 1f);
+        }
+    }, .1f, 512);
+
     public static Transform Place(Transform parent, Mesh mesh, Color c, Vector3 pos, Vector3 euler = default, Vector3? scale = null, float smooth = .3f)
     {
         var t = Part(parent.gameObject, mesh, Plain(c, smooth), pos, euler, scale);
@@ -160,35 +181,6 @@ public static partial class Products
         return root;
     }
 
-    // airport at the end of a country's road: tarmac, a terminal with a glass front, a control tower, and the plane
-    // for the next country waiting on the apron (tail in that country's colour). Centred on the road's end.
-    public static GameObject Airport(Color tail)
-    {
-        var root = new GameObject("Airport");
-        Part(root, Cube, Plain(C("#8a8f99"), .2f), new(0, .01f, 1.6f), scale: new(7.2f, .02f, 4.4f)); // tarmac
-        var white = Plain(C("#f4f4f2"), .4f);
-        var glass = Plain(C("#5a8fc2"), .9f);
-        // terminal on the left, the tower on the right
-        Part(root, Cube, white, new(-2.2f, .45f, 2.6f), scale: new(2.4f, .9f, 1.2f));
-        Part(root, Cube, glass, new(-2.2f, .48f, 1.99f), scale: new(2.2f, .42f, .02f));
-        Part(root, Cube, Plain(C("#c8cdd6"), .4f), new(-2.2f, .95f, 2.6f), scale: new(2.6f, .1f, 1.4f));
-        Part(root, Cylinder, white, new(2.4f, .9f, 2.8f), scale: new(.32f, .9f, .32f));
-        Part(root, Cylinder, glass, new(2.4f, 1.95f, 2.8f), scale: new(.6f, .15f, .6f));
-        Part(root, Cylinder, white, new(2.4f, 2.15f, 2.8f), scale: new(.68f, .05f, .68f));
-        // the plane, nose towards the player
-        var plane = Plain(Color.white, .6f);
-        Spin(root, Capsule(2.2f, .26f), plane, new(0, .45f, 2.9f), new(-90, 0, 0)); // fuselage along -Z
-        Part(root, Cube, plane, new(0, .4f, 1.75f), new(0, 0, 0), new(3.2f, .06f, .5f)); // wings
-        Part(root, Cube, plane, new(0, .5f, 2.75f), scale: new(1.2f, .05f, .3f)); // tailplane
-        Part(root, Cube, Plain(tail, .5f), new(0, .85f, 2.75f), scale: new(.06f, .6f, .4f)); // fin
-        var window = Plain(C("#2a3550"), .8f);
-        for (int i = 0; i < 6; i++)
-            foreach (float x in new[] { -.25f, .25f })
-                Part(root, Sphere, window, new(x, .52f, .95f + i * .22f), scale: new(.02f, .07f, .07f));
-        Part(root, Sphere, window, new(0, .58f, .88f), scale: new(.3f, .1f, .12f)); // cockpit, just behind the nose (z = .7)
-        return root;
-    }
-
     // ---------- the world map's globe ----------
 
     // the earth: Resources/Earth.png, NASA's Blue Marble (public domain) repainted in flat colours, equirectangular. The lathe's v
@@ -287,12 +279,57 @@ public static partial class Products
         return root;
     }
 
-    // orange traffic cone with a white band
-    public static GameObject Cone()
+    // airport where the player lands in a country: dark tarmac with yellow guide lines and a white edge, a runway along
+    // the back, a glass-fronted terminal with a jet bridge out to the airliner they came in on (tail in that country's
+    // colour), the control tower, a baggage tug with its carts. Built with the road's end at the origin and the
+    // buildings towards +Z; the map turns it round to sit before the road's start.
+    public static GameObject Airport(Color tail)
     {
-        var root = new GameObject("Cone");
-        Part(root, Cube, Plain(C("#e8742a"), .4f), new(0, .02f, 0), scale: new(.42f, .04f, .42f));
-        Spin(root, P(0, .04f, .16f, .04f, .03f, .6f, 0, .6f), Paint((u, v) => v > .45f && v < .62f ? Color.white : C("#f08a24"), .5f));
+        var root = new GameObject("Airport");
+        Part(root, Cube, Paint((u, v) =>
+        {
+            if (u < .015f || u > .985f || v < .02f || v > .98f) return C("#f4f4f2"); // edge
+            if (Mathf.Abs(u - .55f) < .006f && v < .5f || Mathf.Abs(v - .5f) < .009f && u > .3f && u < .55f) return C("#f2c230"); // guide lines
+            return C("#6b707a") * (.95f + .08f * Mathf.PerlinNoise(u * 30, v * 20));
+        }, .2f, 256), new(0, .01f, 1.6f), scale: new(7.2f, .02f, 4.4f));
+        Part(root, Cube, Paint((u, v) => Mathf.Abs(v - .5f) < .06f && Mathf.Repeat(u * 10, 1) < .5f ? Color.white : C("#4a4e57"), .2f),
+            new(0, .022f, 3.45f), scale: new(7.2f, .01f, .7f)); // runway with its centre dashes
+        var white = Plain(C("#f4f4f2"), .4f);
+        // terminal: a glass front over a white base, a pale roof overhanging it
+        Part(root, Cube, Paint((u, v) => v > .25f && v < .85f ? (Mathf.Repeat(u * 12, 1) < .08f ? C("#d9dde3") : C("#5a8fc2")) : C("#f4f4f2"), .85f),
+            new(-2.3f, .42f, 2.3f), scale: new(2.4f, .84f, 1.1f));
+        Part(root, Cube, Plain(C("#c8cdd6"), .4f), new(-2.3f, .88f, 2.3f), scale: new(2.7f, .08f, 1.35f));
+        Part(root, Cube, white, new(-.85f, .45f, 1.8f), new(0, 25, 0), new(.9f, .22f, .22f)); // jet bridge to the plane's door
+        // the airliner, nose towards the road, wheels down on the apron
+        var plane = Plane(tail).transform;
+        plane.SetParent(root.transform, false);
+        plane.localPosition = new(.3f, .32f, 1.75f);
+        plane.localRotation = Quaternion.LookRotation(Vector3.down, Vector3.back); // its nose (+Y) to -Z, its top (-Z) up
+        plane.localScale = Vector3.one * 2.3f;
+        // control tower on the right, with its antenna
+        Part(root, Cylinder, white, new(2.5f, .9f, 2.6f), scale: new(.32f, .9f, .32f));
+        Part(root, Cylinder, Plain(C("#5a8fc2"), .9f), new(2.5f, 1.95f, 2.6f), scale: new(.62f, .15f, .62f));
+        Part(root, Cylinder, white, new(2.5f, 2.15f, 2.6f), scale: new(.7f, .05f, .7f));
+        Part(root, Cylinder, Plain(C("#d7192a"), .5f), new(2.5f, 2.4f, 2.6f), scale: new(.03f, .2f, .03f));
+        // baggage tug pulling three carts
+        Part(root, Cube, Plain(C("#f2c230"), .4f), new(1.5f, .12f, .6f), scale: new(.3f, .2f, .22f));
+        for (int k = 0; k < 3; k++)
+            Part(root, Cube, Plain(C(k == 1 ? "#2f7ae5" : "#e8742a"), .4f), new(1.95f + k * .36f, .1f, .6f), scale: new(.3f, .16f, .22f));
+        return root;
+    }
+
+    // a monument still to win, wrapped like a present: a draped tarp of `size` (standing on y = 0, centred), a red
+    // ribbon crossing over it both ways and a big bow on top
+    public static GameObject Wrapped(Vector3 size)
+    {
+        var root = new GameObject("Wrapped");
+        Part(root, Cube, Paint((u, v) => C("#8fa0bd") * (.88f + .14f * Mathf.Abs(Mathf.Sin(u * 30 + v * 2))), .3f), new(0, size.y / 2, 0), scale: size); // folds
+        var ribbon = Plain(C("#d7192a"), .6f);
+        Part(root, Cube, ribbon, new(0, size.y / 2, 0), scale: new(.18f, size.y + .03f, size.z + .03f));
+        Part(root, Cube, ribbon, new(0, size.y / 2, 0), scale: new(size.x + .03f, size.y + .03f, .18f));
+        foreach (int s in new[] { -1, 1 })
+            Part(root, Sphere, ribbon, new(s * .22f, size.y + .14f, 0), new(0, 0, s * -30), new(.42f, .2f, .26f)); // the bow's loops
+        Part(root, Sphere, ribbon, new(0, size.y + .1f, 0), scale: Vector3.one * .16f); // its knot
         return root;
     }
 
@@ -311,20 +348,11 @@ public static partial class Products
         return root;
     }
 
-    // red and white barrier across the road, for a world still locked
-    public static GameObject Barrier()
-    {
-        var root = new GameObject("Barrier");
-        var dark = Plain(C("#3a3f4b"), .3f);
-        foreach (float x in new[] { -1.05f, 1.05f }) Part(root, Cylinder, dark, new(x, .3f, 0), scale: new(.1f, .3f, .1f));
-        for (int i = 0; i < 6; i++)
-            Part(root, Cube, Plain(i % 2 == 0 ? C("#e8423c") : Color.white, .5f), new(-.92f + i * .37f, .62f, 0), scale: new(.37f, .18f, .12f));
-        return root;
-    }
-
     // one piece of scenery for country w; r (0..1) picks the variant and its size.
-    // France: plane trees, lamp posts, Morris columns, café tables and flower beds; Italy: cypresses and olive bushes; Japan: cherry trees and stone
-    // lanterns; USA: palm trees and cacti.
+    // France: Haussmann buildings, plane trees, lamp posts, Morris columns, café tables, flower beds; Italy: villas, rows of vines,
+    // olive bushes, cypresses; Japan: pagodas, koi ponds, bamboo, stone lanterns, cherry trees; USA: mesas, Route 66 signs,
+    // water towers, cacti, palm trees. The painted façades are shared by every copy.
+    static Material haussmann, villa;
     public static GameObject Decor(int w, float r)
     {
         var root = new GameObject("Decor");
@@ -338,12 +366,12 @@ public static partial class Products
         }
         switch (w)
         {
-            case 0 when r < .3f: // Paris lamp post
+            case 0 when r < .2f: // Paris lamp post
                 Part(root, Cylinder, Plain(C("#2f4a3a"), .5f), new(0, .7f, 0), scale: new(.07f, .7f, .07f));
                 Part(root, Cube, Plain(C("#2f4a3a"), .5f), new(0, 1.42f, 0), scale: new(.22f, .06f, .22f));
                 Part(root, Sphere, Plain(C("#fff2b0"), .9f), new(0, 1.55f, 0), scale: Vector3.one * .22f);
                 break;
-            case 0 when r < .4f: // Morris column, dark green with a little dome
+            case 0 when r < .27f: // Morris column, dark green with a little dome
             {
                 var green = Plain(C("#2f4a3a"), .5f);
                 Part(root, Cylinder, Paint((u, v) => Mathf.Repeat(u * 5, 1) < .5f ? C("#f2e6c8") : C("#e8b25a"), .3f), new(0, .6f, 0), scale: new(.34f, .45f, .34f));
@@ -352,7 +380,7 @@ public static partial class Products
                 Spin(root, Ball(.2f, 1.1f, .8f), green);
                 break;
             }
-            case 0 when r < .52f: // café table under a red and white umbrella, two chairs
+            case 0 when r < .36f: // café table under a red and white umbrella, two chairs
             {
                 var metal = Plain(C("#2a2d35"), .5f);
                 Part(root, Cylinder, metal, new(0, .3f, 0), scale: new(.04f, .3f, .04f));
@@ -363,24 +391,86 @@ public static partial class Products
                     Part(root, Cube, Plain(C("#c79a5a"), .3f), new(x, .25f, 0), scale: new(.22f, .5f, .22f));
                 break;
             }
-            case 0 when r < .62f: // round flower bed
+            case 0 when r < .44f: // round flower bed
                 Part(root, Cylinder, Plain(C("#cfc6b4"), .2f), new(0, .08f, 0), scale: new(.9f, .08f, .9f));
                 Part(root, Sphere, Paint((u, v) => Dot(u, v, 14, 8, .5f, .35f, 2, out float k) ? (k < .25f ? C("#e3263a") : C("#f7b6cf")) : C("#4fa83d"), .3f),
                     new(0, .2f, 0), scale: new(.8f, .3f, .8f));
                 break;
+            case 0 when r < .66f: // Haussmann building: cream stone, rows of tall windows, a black balcony, slate roof and chimneys
+            {
+                haussmann ??= Paint((u, v) => Mathf.Repeat(u * 4, 1) is > .3f and < .7f && Mathf.Repeat(v * 4, 1) is > .25f and < .75f
+                    ? C("#5a6e8a") : C("#efe2c6"), .3f);
+                Part(root, Cube, haussmann, new(0, .65f, 0), scale: new(1.2f, 1.3f, .9f));
+                Part(root, Cube, Plain(C("#2a2d35"), .4f), new(0, .78f, -.47f), scale: new(1.22f, .05f, .08f)); // balcony
+                Part(root, Cube, Plain(C("#4f5b6e"), .4f), new(0, 1.42f, 0), scale: new(1.14f, .26f, .84f)); // roof
+                foreach (float x in new[] { -.35f, .35f }) Part(root, Cube, Plain(C("#c9785a"), .3f), new(x, 1.65f, .1f), scale: new(.12f, .22f, .12f));
+                break;
+            }
             case 0: // plane tree: pale mottled bark
                 Part(root, Cylinder, Paint((u, v) => Mathf.PerlinNoise(u * 8, v * 8) > .55f ? C("#d9cfb8") : C("#9a8a6a"), .2f), new(0, .3f * s, 0), scale: new(.15f, .3f * s, .15f));
                 Part(root, Sphere, Plain(C("#6cbb52"), .25f), new(0, .85f * s, 0), scale: new Vector3(1f, .85f, 1f) * s);
                 Part(root, Sphere, Plain(C("#82c964"), .25f), new(-.12f * s, 1.05f * s, -.12f * s), scale: new Vector3(.55f, .45f, .55f) * s);
                 break;
-            case 1 when r < .4f: // olive bush
+            case 1 when r < .15f: // Tuscan villa: ochre walls with green shutters, a terracotta roof
+            {
+                villa ??= Paint((u, v) => Mathf.Repeat(u * 3, 1) is > .35f and < .65f && Mathf.Repeat(v * 2, 1) is > .3f and < .75f
+                    ? C("#4f7a4a") : C("#efc485"), .25f);
+                Part(root, Cube, villa, new(0, .4f, 0), scale: new(1.1f, .8f, .8f));
+                var tiles = Plain(C("#c8643c"), .3f);
+                Part(root, Cube, tiles, new(0, .9f, -.22f), new(-22, 0, 0), new(1.24f, .07f, .5f));
+                Part(root, Cube, tiles, new(0, .9f, .22f), new(22, 0, 0), new(1.24f, .07f, .5f));
+                break;
+            }
+            case 1 when r < .4f: // a row of vines on their stakes
+            {
+                var vine = Plain(C("#5f8f3a"), .3f);
+                var stake = Plain(C("#8a6a45"), .2f);
+                for (int k = 0; k < 5; k++)
+                {
+                    Part(root, Cylinder, stake, new(-.6f + k * .3f, .22f, 0), scale: new(.03f, .22f, .03f));
+                    Part(root, Sphere, vine, new(-.6f + k * .3f, .38f, 0), scale: new(.3f, .3f, .22f));
+                }
+                break;
+            }
+            case 1 when r < .6f: // olive bush
                 Part(root, Sphere, Plain(C("#8fa36a"), .2f), new(0, .3f, 0), scale: new Vector3(.8f, .55f, .8f) * s);
                 break;
             case 1: // cypress
                 Part(root, Cylinder, trunk, new(0, .15f, 0), scale: new(.1f, .15f, .1f));
                 Part(root, Sphere, Plain(C("#2f6b3a"), .25f), new(0, 1f * s, 0), scale: new Vector3(.45f, 1.8f, .45f) * s);
                 break;
-            case 2 when r < .3f: // stone lantern
+            case 2 when r < .12f: // pagoda: three red tiers under wide dark roofs with upturned eaves, a spire
+            {
+                var red = Plain(C("#c8322c"), .4f);
+                var roof = Plain(C("#2f3440"), .4f);
+                for (int k = 0; k < 3; k++)
+                {
+                    float y = k * .55f, sz = .8f - k * .15f;
+                    Part(root, Cube, red, new(0, y + .22f, 0), scale: new(sz, .44f, sz));
+                    Part(root, Cube, roof, new(0, y + .5f, 0), scale: new(sz + .5f, .07f, sz + .5f));
+                    Part(root, Cube, roof, new(0, y + .55f, 0), scale: new(sz + .2f, .1f, sz + .2f));
+                }
+                Part(root, Cylinder, Plain(C("#d9b44a"), .6f), new(0, 1.9f, 0), scale: new(.04f, .25f, .04f));
+                break;
+            }
+            case 2 when r < .22f: // koi pond: a ring of stones round blue water, three koi
+            {
+                Part(root, Cylinder, Plain(C("#9a9c96"), .2f), new(0, .02f, 0), scale: new(1.3f, .04f, 1f));
+                Part(root, Cylinder, Plain(C("#5fa3d6"), .8f), new(0, .04f, 0), scale: new(1.1f, .02f, .82f));
+                for (int k = 0; k < 3; k++)
+                    Part(root, Sphere, Plain(C(k == 1 ? "#fbf8f0" : "#f07a2a"), .6f), new(-.25f + k * .25f, .06f, (k - 1) * .15f), new(0, k * 70, 0),
+                        new(.16f, .03f, .07f));
+                break;
+            }
+            case 2 when r < .3f: // a clump of bamboo
+            {
+                var cane = Plain(C("#7fb04a"), .4f);
+                for (int k = 0; k < 5; k++)
+                    Part(root, Cylinder, cane, new(Mathf.Cos(k * 1.3f) * .15f, .7f + k * .06f, Mathf.Sin(k * 1.3f) * .15f), new(k * 3 - 6, 0, k * 2 - 4),
+                        new(.06f, .7f + k * .06f, .06f));
+                break;
+            }
+            case 2 when r < .42f: // stone lantern
             {
                 var stone = Plain(C("#a7a9a3"), .2f);
                 Part(root, Cylinder, stone, new(0, .3f, 0), scale: new(.14f, .3f, .14f));
@@ -392,7 +482,25 @@ public static partial class Products
             case 2: // cherry tree in bloom
                 RoundTree(C(r < .65f ? "#f7b6cf" : "#f49ac0"));
                 break;
-            case 3 when r < .4f: // cactus
+            case 3 when r < .15f: // mesa: a flat-topped butte of layered red rock
+                Spin(root, P(0, 0, .9f, 0, .7f, .3f, .62f, .6f, .58f, .85f, .64f, .9f, 0, .9f),
+                    Paint((u, v) => Mathf.Repeat(v * 5, 1) < .3f ? C("#b8582e") : C("#d77a44"), .2f), ribs: 6, ribAmp: .08f);
+                break;
+            case 3 when r < .22f: // Route 66 sign: a white shield on a post
+                Part(root, Cylinder, Plain(C("#8a8f99"), .5f), new(0, .5f, 0), scale: new(.05f, .5f, .05f));
+                Part(root, Cube, Plain(Color.white, .4f), new(0, 1.05f, 0), scale: new(.5f, .45f, .04f));
+                Part(root, Cube, Plain(C("#2a2d35"), .4f), new(0, 1.05f, -.025f), scale: new(.42f, .37f, .01f));
+                Part(root, Cube, Plain(Color.white, .4f), new(0, 1.05f, -.032f), scale: new(.26f, .18f, .01f));
+                break;
+            case 3 when r < .28f: // water tower on stilts
+            {
+                var steel = Plain(C("#c9ced6"), .6f);
+                foreach (var (x, z) in new[] { (-.25f, -.25f), (.25f, -.25f), (.25f, .25f), (-.25f, .25f) })
+                    Part(root, Cylinder, steel, new(x, .55f, z), scale: new(.05f, .55f, .05f));
+                Spin(root, P(0, 1.05f, .42f, 1.05f, .42f, 1.55f, .2f, 1.75f, 0, 1.8f), steel);
+                break;
+            }
+            case 3 when r < .55f: // cactus
             {
                 var green = Plain(C("#4f9a4a"), .3f);
                 Spin(root, Capsule(1.1f * s, .16f), green);

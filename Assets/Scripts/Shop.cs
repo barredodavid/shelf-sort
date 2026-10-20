@@ -11,7 +11,7 @@ public partial class Game
     Color WoodC => Wood;
     Color BackboardC => Backboard;
     Color TagC => Gold;
-    Color AwningC => new(.3f, .78f, .62f);
+    Color AwningC => Worlds[world].color; // the country's colour, white stripes between
 
     void ApplyLighting()
     {

@@ -164,7 +164,7 @@ public partial class Game
         var next = new Rect(card.x + 60, card.yMax - 330, card.width - 120, 150);
         if (Button(next, "Suivant", Gold, 56))
         {
-            // back to the map, where the truck drives on to the next level and starts it (or to the airport)
+            // back to the map, where the truck drives on to the next level and starts it
             OpenMenu(Menu.Map);
             driveThenPlay = lvl < LevelsPerWorld - 1 && truckGoal != truckT;
         }

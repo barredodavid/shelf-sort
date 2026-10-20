@@ -201,7 +201,7 @@ public static class Fx
     }
 
     // White rounded square; used as a 9-sliced IMGUI background, tinted with GUI.backgroundColor
-    // Bonus-bar icons, white on transparent: 0 undo arrow, 1 shuffle arrows, 2 stopwatch. Round pen strokes
+    // Icons, white on transparent: 0 undo arrow, 1 shuffle arrows, 2 stopwatch, 3 plane, 4 speaker, 5 speaker muted. Round pen strokes
     // (distance to segments, like StrokeFont) plus triangular arrowheads, in a 0..1 box with y up.
     public static Texture2D Icon(int kind, int size = 128)
     {
@@ -244,6 +244,22 @@ public static class Fx
                 heads.Add(new Vector2[] { new(.5f, .66f), new(.94f, .4f), new(.5f, .5f) });
                 heads.Add(new Vector2[] { new(.5f, .24f), new(.3f, .1f), new(.5f, .16f) });
                 heads.Add(new Vector2[] { new(.5f, .24f), new(.7f, .1f), new(.5f, .16f) });
+                break;
+            case 4: // speaker with sound waves
+            case 5: // speaker, crossed out
+                heads.Add(new Vector2[] { new(.1f, .38f), new(.28f, .38f), new(.28f, .62f) }); // the box
+                heads.Add(new Vector2[] { new(.1f, .38f), new(.28f, .62f), new(.1f, .62f) });
+                heads.Add(new Vector2[] { new(.22f, .5f), new(.52f, .2f), new(.52f, .8f) }); // the cone
+                if (kind == 4)
+                {
+                    Arc(new(.5f, .5f), .18f, -45, 45);
+                    Arc(new(.5f, .5f), .34f, -45, 45);
+                }
+                else
+                {
+                    Line(new(.64f, .36f), new(.9f, .64f));
+                    Line(new(.64f, .64f), new(.9f, .36f));
+                }
                 break;
             default: // stopwatch
                 Arc(new(.5f, .42f), .32f, 0, 360);

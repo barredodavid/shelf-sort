@@ -46,34 +46,72 @@ public partial class Game
         Awning(0, 0, 9, sw, safeTop + ah);
         float y = safeTop + ah + sw / 2 + 30;
 
-        if (Button(new Rect(40, y, 250, 96), SoundOn ? "Son : oui" : "Son : non", Mist, 38)) ToggleSound();
-        if (Application.isEditor && Button(new Rect(40, y + 116, 250, 80), "Catalogue", Mist, 34)) OpenMenu(Menu.Catalog); // editor only: review every product
+        // top bar: a round sound button, the stars, the coins
+        var sound = new Rect(40, y, 96, 96);
+        if (Button(sound, "", Mist)) ToggleSound();
+        soundIcons ??= new[] { Fx.Icon(5), Fx.Icon(4) };
+        GUI.color = Ink;
+        GUI.DrawTexture(new Rect(sound.x + 16, sound.y + 14, 64, 64), soundIcons[SoundOn ? 1 : 0]);
+        GUI.color = Color.white;
+        StarCount(156, y, TotalStars);
         CoinsPill(W - 290, y);
+        if (Application.isEditor && Button(new Rect(40, y + 116, 250, 80), "Catalogue", Mist, 34)) OpenMenu(Menu.Catalog); // editor only: review every product
 
-        // logo, tilted like a hand-painted shop sign
-        float ly = y + 140;
+        // logo, tilted like a hand-painted shop sign: drops in with a bounce, then bobs gently
+        float ly = y + 150 + 8 * Mathf.Sin(Time.time * 2);
         var keep = GUI.matrix;
+        GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(menuAt + .1f), new Vector2(W / 2 * k, (ly + 170) * k));
         GUIUtility.RotateAroundPivot(-4, new Vector2(W / 2 * k, (ly + 170) * k));
         Logo(new Rect(0, ly, W, 190), "SHELF", 200);
         Logo(new Rect(0, ly + 170, W, 190), "SORT", 200);
         GUI.matrix = keep;
-        var tag = new Rect(W / 2 - 340, ly + 390, 680, 80);
+        var tag = new Rect(W / 2 - 340, y + 540, 680, 80);
         Panel(tag, Ink);
         Label(tag, "LE TOUR DU MONDE DES RAYONS", 38, Color.white);
 
-        // bottom block: stars, then the play button
-        var play = new Rect(60, bottom - 60 - 210, W - 120, 210);
-        float starsY = play.y - 120;
-        StarCount(W / 2 - 125, starsY, TotalStars);
+        // bottom block: where you are (country, its stars), then the play button with the next level on it
+        var play = new Rect(60, bottom - 60 - 230, W - 120, 230);
+        var country = new Rect(W / 2 - 320, play.y - 200, 640, 150);
+        var c = Worlds[world].color;
+        Panel(new Rect(country.x, country.y + 12, country.width, country.height), Darker(c));
+        Panel(country, c);
+        Label(new Rect(country.x, country.y + 8, country.width, 70), Worlds[world].name.ToUpper(), 54, Color.white, true);
+        var bar = new Rect(country.x + 90, country.y + 92, country.width - 260, 30);
+        Panel(bar, new Color(0, 0, 0, .25f));
+        float filled = WorldStars(world) / (float)(LevelsPerWorld * 3);
+        if (filled > 0) Panel(new Rect(bar.x, bar.y, Mathf.Max(bar.height, bar.width * filled), bar.height), Gold);
+        Star(new Rect(bar.xMax + 16, bar.y - 9, 48, 48), true);
+        Label(new Rect(bar.xMax + 66, bar.y - 15, 110, 60), $"{WorldStars(world)}/{LevelsPerWorld * 3}", 30, Color.white, false, TextAnchor.MiddleLeft);
+        // a little plane: tapping the card flies to the globe to change country
+        planeIcon ??= Fx.Icon(3);
+        GUI.DrawTexture(new Rect(country.x + 26, country.y + 22, 60, 60), planeIcon);
+        if (GUI.Button(country, GUIContent.none, GUIStyle.none))
+        {
+            mapWorld = world;
+            OpenWorldMap(-1);
+        }
 
         float pulse = 1 + .03f * Mathf.Sin(Time.time * 4); // gently breathing call to action
         keep = GUI.matrix;
         GUIUtility.ScaleAroundPivot(Vector2.one * pulse, play.center * k);
-        if (Button(play, "JOUER", Gold, 110)) OpenMenu(Menu.Map);
+        if (Button(play, "", Gold)) OpenMenu(Menu.Map);
+        Label(new Rect(play.x, play.y + 18, play.width, 130), "JOUER", 110, Ink);
+        Label(new Rect(play.x, play.y + 142, play.width, 60), $"Niveau {world + 1}-{FirstToPlay(world) + 1}", 40, new Color(Ink.r, Ink.g, Ink.b, .7f));
+        // a shine sweeping across every few seconds
+        float t = Mathf.Repeat(Time.time, 3f);
+        if (t < .7f)
+        {
+            GUI.BeginGroup(play);
+            Panel(new Rect(Mathf.Lerp(-140, play.width + 40, t / .7f), 0, 70, play.height), new Color(1, 1, 1, .35f));
+            GUI.EndGroup();
+        }
         GUI.matrix = keep;
 
-        heroCenterPx = (tag.yMax + starsY) / 2;
+        heroCenterPx = (tag.yMax + country.y) / 2 + 40; // a little low: the flag and the monument stand on the shelf
     }
+
+    Texture2D[] soundIcons; // muted, on
+    Texture2D planeIcon;
 
     // big title text: white outline, soft drop shadow, red fill
     void Logo(Rect r, string s, int size)

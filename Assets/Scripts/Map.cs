@@ -2,8 +2,10 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // Country map: a 3D diorama of one country (mapWorld), built far from the board (MapO) and filmed from above by the
-// main camera. Its road starts at the country's gate, by its monument, runs past its 20 shops (one per level) and
-// ends at the airport, where the plane leaves for the next country (WorldMap.cs); the last country ends on works.
+// main camera. Its road sets off from the airport where the player landed, passes the country's gate, runs past its
+// 20 shops (one per level) through the country's own ground and decor, and ends on a round plaza around its monument,
+// wrapped like a present until all 20 levels are done (then unveiled once, with a reward). The next country is
+// reached from the globe (WorldMap.cs).
 // A delivery truck waits at the current level, drives on to the next one after a win, and drives to any open level
 // the player taps before starting it. Level numbers, stars and signs' text are GUI drawn over the 3D scene.
 // t = global level index (world * 20 + level), fractional between levels; MapPos(t) = the point of the road at t.
@@ -20,6 +22,10 @@ public partial class Game
     Vector2 lastPress;
     Transform mapRoot, truck3D;
     readonly List<Transform> pads = new();
+    Transform landmark3D; // the monument on the plaza, wrapped until the country is finished
+    Vector3 landmarkScale;
+    float revealAt = -10; // when the monument was just unveiled: it pops up, a banner shows the reward
+    const int RevealCoins = 200;
 
     // star totals read every level's prefs: computed when a map opens, not on every GUI event
     readonly bool[] openWorlds = new bool[Worlds.Length];
@@ -29,11 +35,13 @@ public partial class Game
 
     static Vector3 MapPos(float t) => MapO + new Vector3(1.1f * Mathf.Sin(t * .6f), 0, t * NodeGap);
 
-    // this country's stretch of road: gate a little before level 1, airport a little after level 20
+    // this country's stretch of road: gate a little before level 1, the monument's plaza a little after level 20
     float First => mapWorld * LevelsPerWorld;
     float Last => First + LevelsPerWorld - 1;
     float GateT => First - 1.1f;
-    float AirportT => Last + 1.6f;
+    float StartT => First - 3.2f; // the airport where the player lands, before the gate
+    float PlazaT => Last + 2.2f;
+    const float PlazaR = 2.3f;
     bool LastCountry => mapWorld == Worlds.Length - 1;
 
     static float Hash01(int a, int b) => Mathf.Abs(Mathf.Sin(a * 12.9898f + b * 78.233f) * 43758.5453f) % 1;
@@ -67,6 +75,13 @@ public partial class Game
         return LevelsPerWorld - 1;
     }
 
+    static bool Completed(int w)
+    {
+        for (int l = 0; l < LevelsPerWorld; l++)
+            if (!Done(w, l)) return false;
+        return true;
+    }
+
     void EnterMap()
     {
         RefreshStars();
@@ -75,12 +90,8 @@ public partial class Game
         truckT = truckGoal = cur;
         driveThenPlay = false;
         playAt = 0;
-        // after a win the truck moves on by itself: to the next shop, or to the airport after the country's last one
-        if (Done(world, lvl))
-        {
-            if (lvl < LevelsPerWorld - 1 && Reachable(cur + 1)) DriveTo(cur + 1, false);
-            else if (lvl == LevelsPerWorld - 1 && !LastCountry) DriveTo(AirportT - .6f, false);
-        }
+        // after a win the truck moves on by itself to the next shop
+        if (Done(world, lvl) && lvl < LevelsPerWorld - 1 && Reachable(cur + 1)) DriveTo(cur + 1, false);
         nextLevel = -1; // first open level of this country not finished yet: its shop gently pulses
         for (int g = (int)First; g <= Last && nextLevel < 0; g++)
             if (Reachable(g) && !Done(g / LevelsPerWorld, g % LevelsPerWorld)) nextLevel = g;
@@ -88,6 +99,17 @@ public partial class Game
         scrollZ = CenterZ(truckT);
         var ahead = TruckPos(truckT + .05f) - TruckPos(truckT);
         truckYaw = Mathf.Atan2(-ahead.z, ahead.x) * Mathf.Rad2Deg;
+        // the country just finished: unveil its monument once, with a reward, the camera on the plaza
+        if (Completed(world) && PlayerPrefs.GetInt($"revealed{world}", 0) == 0)
+        {
+            PlayerPrefs.SetInt($"revealed{world}", 1);
+            coins += RevealCoins;
+            PlayerPrefs.SetInt("coins", coins);
+            PlayerPrefs.Save();
+            revealAt = Time.time;
+            scrollZ = CenterZ(PlazaT);
+            Fx.Play("win");
+        }
     }
 
     // ---------- 3D scene, rebuilt by Render() when the map opens ----------
@@ -101,21 +123,32 @@ public partial class Game
         truckWorld = -1;
         int w = mapWorld;
         Vector3 Up(float y) => new(0, y, 0);
+        var plaza = MapPos(PlazaT);
 
-        // ground
-        float z0 = MapPos(First - 7).z, z1 = MapPos(AirportT + 8).z;
-        Products.Place(mapRoot, Products.Cube, Products.Ground(w), new Vector3(MapO.x, -.1f, (z0 + z1) / 2), default, new Vector3(30, .2f, z1 - z0), .1f);
+        // ground, painted with the country's own land (Products.GroundTexture)
+        float z0 = MapPos(StartT - 5).z, z1 = MapPos(PlazaT + 7).z;
+        var ground = Products.Place(mapRoot, Products.Cube, Color.white, new Vector3(MapO.x, -.1f, (z0 + z1) / 2), default, new Vector3(30, .2f, z1 - z0), .1f);
+        ground.GetComponent<Renderer>().material = Products.GroundMat(w, 30, z1 - z0);
 
-        // road: sidewalks in the country's paving, white kerbs, asphalt, dashed middle line
+        // France: the Seine running along the left between stone quays, at a steady distance from the road
+        if (w == 0)
+        {
+            var river = new List<Vector3>();
+            for (float z = z0; z <= z1; z += .5f) river.Add(new Vector3(MapPos(z / NodeGap).x - 4.4f, 0, z)); // bending with the road, clear of the shops
+            Products.Place(mapRoot, Products.Ribbon(river, 2.1f), C2("#d6ccb8"), Up(.004f), smooth: .1f);
+            Products.Place(mapRoot, Products.Ribbon(river, 1.7f), C2("#5fa3d6"), Up(.008f), smooth: .8f);
+        }
+
+        // road: sidewalks in the country's paving, white kerbs, asphalt, dashed middle line; it runs into the plaza
         var pts = new List<Vector3>();
-        for (float t = First - 3; t <= AirportT; t += .05f) pts.Add(MapPos(t));
+        for (float t = StartT; t <= PlazaT - .4f; t += .05f) pts.Add(MapPos(t));
         string[] paving = { "#e6dccb", "#e8c9a4", "#d3cec2", "#d9d9d6" };
         Products.Place(mapRoot, Products.Ribbon(pts, 2.7f), C2(paving[w]), Up(.005f), smooth: .1f);
         Products.Place(mapRoot, Products.Ribbon(pts, 1.35f), C2("#fbf8f0"), Up(.01f));
         Products.Place(mapRoot, Products.Ribbon(pts, 1.1f), C2("#5a5f6c"), Up(.02f), smooth: .15f);
         Products.Place(mapRoot, Products.Ribbon(pts, .09f, i => i % 6 < 3), Color.white, Up(.03f));
 
-        // one shop per level
+        // one shop per level; the next one to play gets a glowing ring round its pavement (it pulses with the shop)
         for (int g = (int)First; g <= Last; g++)
         {
             int l = g % LevelsPerWorld;
@@ -125,57 +158,106 @@ public partial class Game
             pad.SetParent(mapRoot);
             pad.position = PadPos(g);
             Products.Place(mapRoot, Products.Ribbon(new[] { MapPos(g), PadPos(g) }, .55f), C2("#fbf8f0"), Up(.015f)); // driveway
+            if (g == nextLevel)
+            {
+                var ring = Products.Place(pad, Products.Cylinder, Gold, new Vector3(0, .02f, -.1f), default, new Vector3(2f, .02f, 1.75f));
+                var glow = ring.GetComponent<Renderer>().material;
+                glow.EnableKeyword("_EMISSION");
+                glow.SetColor("_EmissionColor", Gold * .8f);
+            }
             pads.Add(pad);
         }
 
-        // the country's gate, and its monument beside the start of the road
+        // the country's gate at the start of the road
         var gate = Products.Gate(Worlds[w].color, MapTilt).transform;
         gate.SetParent(mapRoot);
         gate.position = new Vector3(MapPos(GateT).x, 0, MapPos(GateT).z);
-        var lp = MapPos(First - 2.4f);
-        var landmark = new Vector3(MapO.x + (lp.x > MapO.x ? -1 : 1) * 2.6f, 0, lp.z);
+
+        // the airport where the player landed, before the gate: the road sets off from its apron
+        var port = Products.Airport(Worlds[w].color).transform;
+        port.SetParent(mapRoot);
+        port.SetPositionAndRotation(new Vector3(MapO.x, 0, MapPos(StartT).z), Quaternion.Euler(0, 180, 0));
+
+        // the end of the road: a round plaza with white kerbs, the country's monument in the middle, bushes round it
+        Products.Place(mapRoot, Products.Cylinder, C2("#fbf8f0"), plaza + Up(.004f), default, new Vector3(2 * PlazaR + .2f, .01f, 2 * PlazaR + .2f));
+        Products.Place(mapRoot, Products.Cylinder, C2(paving[w]), plaza + Up(.012f), default, new Vector3(2 * PlazaR, .01f, 2 * PlazaR), .1f);
         var lm = Products.Landmark(w).transform;
         lm.SetParent(mapRoot);
-        lm.position = landmark;
-        if (w == 2) lm.localScale = Vector3.one * .65f; // Fuji is wide
-
-        // end of the road: the airport to the next country, or works until the next country ships
-        if (!LastCountry)
+        lm.position = plaza + new Vector3(0, 0, .4f);
+        if (w == 2) lm.localScale = Vector3.one * .7f; // Fuji is wide
+        landmark3D = lm;
+        landmarkScale = lm.localScale;
+        if (!Completed(w)) // still to win: wrapped up under a tarp with a red ribbon and a bow
         {
-            var port = Products.Airport(Worlds[w + 1].color).transform;
-            port.SetParent(mapRoot);
-            port.position = new Vector3(MapO.x, 0, MapPos(AirportT).z);
+            var rs = lm.GetComponentsInChildren<Renderer>();
+            var b = rs[0].bounds;
+            foreach (var r in rs) b.Encapsulate(r.bounds);
+            var wrap = Products.Wrapped(b.size).transform;
+            wrap.SetParent(mapRoot);
+            wrap.position = new Vector3(b.center.x, 0, b.center.z);
+            lm.gameObject.SetActive(false);
         }
-        else
+        for (int k = 0; k < 6; k++)
         {
-            var end = Products.Barrier().transform;
-            end.SetParent(mapRoot);
-            end.position = MapPos(Last + .65f);
-            for (int k = 0; k < 3; k++)
-            {
-                var cone = Products.Cone().transform;
-                cone.SetParent(mapRoot);
-                cone.position = MapPos(Last + .9f + k * .2f) + new Vector3((k - 1) * .4f, 0, 0);
-            }
+            float a = (k * 60 + 30) * Mathf.Deg2Rad;
+            if (Mathf.Sin(a) < -.5f) continue; // the road comes in at the front
+            Products.Place(mapRoot, Products.Sphere, C2("#5aa84a"), plaza + new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)) * (PlazaR - .25f) + Up(.2f), default,
+                new Vector3(.5f, .4f, .5f), .25f);
         }
 
-        // decor on both sides, kept clear of the road, the shops, the monument and the airport
-        for (float t = First - 6; t < AirportT + 6; t += .45f)
+        // Decor: each piece is measured once built (the circle round its footprint) and kept only if that circle stays
+        // clear of the road and its pavements, the shops, the Seine, the plaza, the gate, the airport and the pieces
+        // already placed; otherwise it is thrown away.
+        var placed = new List<(Vector2 c, float r)>();
+        float airZ = MapPos(StartT).z;
+        float RoadX(float z) => MapPos((z - MapO.z) / NodeGap).x;
+        bool Clear(Vector2 c, float r)
+        {
+            if (c.y - r < airZ + .7f && c.y + r > airZ - 3.9f) return false; // the airport's band
+            if (c.y + r > airZ && c.y - r < plaza.z)
+                for (float dz = -r; dz <= r; dz += r)
+                    if (Mathf.Abs(c.x - RoadX(c.y + dz)) < 1.4f + r) return false;
+            foreach (var pad in pads)
+                if (Vector2.Distance(c, new Vector2(pad.position.x, pad.position.z)) < 1.1f + r) return false;
+            if (w == 0 && c.x - r < RoadX(c.y) - 4.4f + 1.1f) return false; // the Seine and its quay
+            if (Vector2.Distance(c, new Vector2(plaza.x, plaza.z)) < PlazaR + .15f + r) return false;
+            if (Vector2.Distance(c, new Vector2(MapPos(GateT).x, MapPos(GateT).z)) < 1.6f + r) return false;
+            foreach (var (pc, pr) in placed)
+                if (Vector2.Distance(c, pc) < r + pr - .05f) return false;
+            return true;
+        }
+        void TryDecor(float variant, float x, float z, float yaw)
+        {
+            var d = Products.Decor(w, variant).transform;
+            d.SetParent(mapRoot);
+            d.SetPositionAndRotation(new Vector3(x, 0, z), Quaternion.Euler(0, yaw, 0));
+            var rs = d.GetComponentsInChildren<Renderer>();
+            var b = rs[0].bounds;
+            foreach (var rr in rs) b.Encapsulate(rr.bounds);
+            var c = new Vector2(b.center.x, b.center.z);
+            float r = Mathf.Max(b.extents.x, b.extents.z);
+            if (Clear(c, r)) placed.Add((c, r));
+            else Destroy(d.gameObject);
+        }
+
+        // along the road, both sides, packed
+        for (float t = First - 6; t < PlazaT; t += .38f) // beyond the plaza: the park below
             for (int side = 0; side < 2; side++)
             {
                 int k = Mathf.RoundToInt(t * 10);
-                if (Hash01(k, side) < .35f) continue;
-                var p = MapPos(t);
-                float x = MapO.x + (side == 0 ? -1 : 1) * (2.4f + 1.6f * Hash01(k, side + 7));
-                if (Mathf.Abs(x - p.x) < 2.4f || Mathf.Abs(x - MapPos(t + .4f).x) < 2.4f || Mathf.Abs(x - MapPos(t - .4f).x) < 2.4f) continue;
-                int near = (int)Mathf.Clamp(Mathf.Round(t), First, Last);
-                if (Vector2.Distance(new Vector2(x, p.z), new Vector2(PadPos(near).x, PadPos(near).z)) < 1.9f) continue;
-                if (Vector2.Distance(new Vector2(x, p.z), new Vector2(landmark.x, landmark.z)) < 2.8f) continue;
-                if (!LastCountry && Mathf.Abs(p.z - MapPos(AirportT).z) < 3.5f) continue;
-                var d = Products.Decor(w, Hash01(k, side + 3)).transform;
-                d.SetParent(mapRoot);
-                d.position = new Vector3(x, 0, p.z + (Hash01(k, side + 5) - .5f) * .6f);
-                d.rotation = Quaternion.Euler(0, Hash01(k, side + 9) * 360, 0);
+                if (Hash01(k, side) < .2f) continue;
+                float x = MapO.x + (side == 0 ? -1 : 1) * (2.3f + 1.8f * Hash01(k, side + 7));
+                TryDecor(Hash01(k, side + 3), x, MapPos(t).z + (Hash01(k, side + 5) - .5f) * .4f, Hash01(k, side + 9) * 360);
+            }
+
+        // behind the plaza, after a stretch of open lawn, a calm park of the country's trees across the whole width
+        float trees = new[] { .66f, .6f, .42f, .55f }[w]; // where Decor's tree variants start: plane trees, cypresses, cherries, palms
+        for (float z = plaza.z + PlazaR + 2; z < z1 - 1; z += 1.6f)
+            for (float x = -3.4f; x <= 3.4f; x += 1.7f)
+            {
+                int k = Mathf.RoundToInt(z * 7 + x * 3);
+                if (Hash01(k, 11) < .45f) continue;
+                TryDecor(Mathf.Lerp(trees, .99f, Hash01(k, 12)), MapO.x + x + (Hash01(k, 13) - .5f) * .5f, z + (Hash01(k, 14) - .5f) * .5f, Hash01(k, 15) * 360);
             }
     }
 
@@ -246,12 +328,16 @@ public partial class Game
             scrollZ += mapVel * dt;
             mapVel *= Mathf.Pow(.04f, dt);
         }
-        scrollZ = Mathf.Clamp(scrollZ, CenterZ(First - 1.5f), CenterZ(LastCountry ? Last + 1 : AirportT - .5f));
+        scrollZ = Mathf.Clamp(scrollZ, CenterZ(StartT + .5f), CenterZ(PlazaT));
 
         // camera
         var rot = Quaternion.Euler(MapTilt, 0, 0);
         cam.transform.SetPositionAndRotation(new Vector3(MapO.x, 0, scrollZ) - rot * Vector3.forward * 15, rot);
         cam.orthographicSize = 3.8f / cam.aspect;
+
+        // the monument, just unveiled, pops up
+        if (landmark3D && landmark3D.gameObject.activeSelf)
+            landmark3D.localScale = landmarkScale * (Time.time - revealAt < 2 ? PopIn(revealAt + .4f) : 1);
 
         // the next level to play breathes
         for (int i = 0; i < pads.Count; i++)
@@ -293,11 +379,6 @@ public partial class Game
     {
         var p = new Vector2(screen.x / GuiScale, (Screen.height - screen.y) / GuiScale);
         if (p.y < SafeTopPx() + 150 || p.y > Screen.height / GuiScale - SafeBottomPx() - 230) return; // header and the bottom button
-        if (!LastCountry && Vector2.Distance(p, ToGui(new Vector3(MapO.x, .8f, MapPos(AirportT).z))) < 180)
-        {
-            TakeOff();
-            return;
-        }
         for (int g = (int)First; g <= Last; g++)
         {
             if (Vector2.Distance(p, ToGui(PadPos(g) + new Vector3(0, .6f, 0))) > 110) continue;
@@ -347,24 +428,33 @@ public partial class Game
         Label(new Rect(board.x - 200, board.y - 62, 400, 50), $"PAYS {mapWorld + 1}", 34, Color.white, true);
         Label(new Rect(board.x - 200, board.y - 18, 400, 70), Worlds[mapWorld].name.ToUpper(), 52, Color.white, true);
 
-        // airport sign, or the works at the end of the last country
-        var endSign = ToGui(MapPos(LastCountry ? Last + 1.15f : AirportT) + new Vector3(0, LastCountry ? 1 : 2.2f, 0));
-        if (endSign.y > -150 && endSign.y < H + 150)
+        // a plaque at the plaza's front: the monument's name once the country is finished, until then what unveils it
+        var plaque = ToGui(MapPos(PlazaT) + new Vector3(0, 0, -PlazaR + .3f));
+        if (plaque.y > -150 && plaque.y < H + 150)
         {
-            var sign = new Rect(endSign.x - 280, endSign.y - 70, 560, 140);
-            Panel(new Rect(sign.x, sign.y + 12, sign.width, sign.height), Darker(Gold));
-            Panel(sign, Gold);
-            if (LastCountry)
-            {
-                Label(new Rect(sign.x, sign.y + 10, sign.width, 60), "PROCHAIN PAYS", 48, Ink);
-                Label(new Rect(sign.x, sign.y + 70, sign.width, 50), "BIENTÔT !", 40, Red);
-            }
+            bool won = Completed(mapWorld);
+            var sign = new Rect(plaque.x - 250, plaque.y - 55, 500, won ? 100 : 120);
+            Panel(new Rect(sign.x, sign.y + 10, sign.width, sign.height), Darker(won ? Gold : Ink));
+            Panel(sign, won ? Gold : Ink);
+            if (won) Label(sign, new[] { "TOUR EIFFEL", "COLISÉE", "MONT FUJI", "NEW YORK" }[mapWorld], 46, Ink);
             else
             {
-                Label(new Rect(sign.x, sign.y + 10, sign.width, 60), "AÉROPORT", 48, Ink);
-                Label(new Rect(sign.x, sign.y + 70, sign.width, 50), openWorlds[mapWorld + 1]
-                    ? $"Vols pour : {Worlds[mapWorld + 1].name}" : $"{Worlds[mapWorld + 1].name} : {Worlds[mapWorld + 1].need} étoiles", 36, Ink);
+                Label(new Rect(sign.x, sign.y + 8, sign.width, 60), "À DÉBLOQUER", 44, Gold);
+                Label(new Rect(sign.x, sign.y + 64, sign.width, 44), $"Finis les {LevelsPerWorld} niveaux", 30, Color.white);
             }
+        }
+
+        // just unveiled: the reward, over the top of the screen for a few seconds
+        if (Time.time - revealAt < 3.5f)
+        {
+            var banner = new Rect(W / 2 - 380, safeTop + 170, 760, 190);
+            var keep = GUI.matrix;
+            GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(revealAt + .4f), banner.center * GuiScale);
+            Panel(new Rect(banner.x, banner.y + 14, banner.width, banner.height), Darker(Gold));
+            Panel(banner, Gold);
+            Label(new Rect(banner.x, banner.y + 18, banner.width, 90), "PAYS TERMINÉ !", 70, Red, true);
+            Label(new Rect(banner.x, banner.y + 112, banner.width, 60), $"+{RevealCoins} pièces", 46, Ink);
+            GUI.matrix = keep;
         }
 
         // numbers on the shops' signs, "DUR" above hard ones, stars under finished ones
