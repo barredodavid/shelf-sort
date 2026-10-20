@@ -29,34 +29,12 @@ public static partial class Products
 
     // ---------- shapes ----------
 
-    // (radius, height) silhouettes, bottom center to top center
-    static readonly Vector2[] BottleProfile =
-    {
-        new(0, 0), new(.27f, 0), new(.32f, .03f), new(.34f, .1f), new(.34f, .72f), new(.31f, .84f),
-        new(.2f, .97f), new(.13f, 1.04f), new(.13f, 1.1f), new(.155f, 1.115f), new(.155f, 1.27f), new(.13f, 1.3f), new(0, 1.3f),
-    };
-    static readonly Vector2[] JarProfile =
-    {
-        new(0, 0), new(.33f, 0), new(.36f, .03f), new(.37f, .08f), new(.37f, .5f), new(.33f, .56f), new(.3f, .58f),
-        new(.34f, .6f), new(.37f, .61f), new(.37f, .74f), new(.34f, .76f), new(0, .76f),
-    };
+    // how much of its slot a product fills (Game.Wrap): 1 for most; less for those that look too big at full size
+    // (or more for wide, flat ones that would look tiny)
+    public static float Fill(string name) => name.StartsWith("Pasta") ? .82f : name.StartsWith("Gyoza") || name.StartsWith("Yakitori") ? 1.25f : 1;
 
     // u that ends up facing the camera: the side at -Z (u = .75), shifted by the 35° yaw Game.Wrap gives products
     const float FrontU = .75f + 35f / 360f;
-
-    static GameObject Bottle(string name, Color liquid, Color label, Color cap, float fill)
-    {
-        const float H = 1.3f, R = .34f, labelLo = .23f, labelHi = .58f, capFrom = 1.11f / H;
-        var cv = new Canvas(256, 256);
-        var clear = new Color(.82f, .88f, .92f);
-        var cream = new Color(1f, .97f, .9f);
-        cv.Paint((u, v) =>
-            v >= capFrom ? Ridged(cap, u)
-            : v >= labelLo && v <= labelHi ? (Mathf.Abs((v - labelLo) / (labelHi - labelLo) - .5f) > .43f ? cream : label)
-            : (v < fill ? liquid : clear) * Sheen(u));
-        LatheText(cv, name, 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2 * H, (labelHi - labelLo) * H * .55f, Color.white);
-        return Spun(name, BottleProfile, cv, .6f);
-    }
 
     // Bordeaux bottle: dark green glass, red wine, burgundy foil capsule, cream label with a gold frame
     static GameObject Wine()
@@ -75,18 +53,6 @@ public static partial class Products
         });
         LatheText(cv, "VIN", 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2 * H, (labelHi - labelLo) * H * .5f, C("#6e1428"));
         return Spun("VIN", P(0, 0, .25f, 0, .27f, .03f, .27f, .82f, .25f, .9f, .15f, .99f, .1f, 1.06f, .1f, 1.36f, .105f, 1.4f, 0, 1.42f), cv, .75f);
-    }
-
-    static GameObject Jar(string name, Color content, Color lid, Color label, Color ink)
-    {
-        const float H = .76f, R = .37f, labelLo = .14f / H, labelHi = .46f / H;
-        var cv = new Canvas(256, 256);
-        cv.Paint((u, v) =>
-            v >= .58f / H ? Ridged(lid, u)
-            : v >= labelLo && v <= labelHi ? (Mathf.Abs((v - labelLo) / (labelHi - labelLo) - .5f) > .4f ? ink : label)
-            : content * Sheen(u));
-        LatheText(cv, name, 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2 * H, (labelHi - labelLo) * H * .5f, ink);
-        return Spun(name, JarProfile, cv, .45f);
     }
 
     static GameObject Carton(string name, Color body, Color accent)

@@ -194,63 +194,118 @@ public static partial class Products
         return root;
     }
 
-    // slice of tiramisu on a plate: sponge and mascarpone layers, cocoa on top
+    // slice of tiramisu on a plate: two rows of coffee-soaked ladyfingers (their round ends show on the cut sides)
+    // between thick mascarpone layers, a velvety cocoa top with two coffee beans, cocoa dusted on the plate
     static GameObject Tiramisu()
     {
         var root = new GameObject("Tiramisu");
-        Spin(root, P(0, 0, .46f, 0, .48f, .03f, .44f, .05f, 0, .04f), Plain(C("#fbfbf7"), .7f));
-        var sponge = Plain(C("#9a6438"), .2f);
-        var cream = Plain(C("#f6ead2"), .3f);
-        for (int i = 0; i < 4; i++)
-            Part(root, Cube, i % 2 == 0 ? sponge : cream, new(0, .1f + i * .1f, 0), scale: new(.64f, .1f, .5f));
-        Part(root, Cube, Paint((u, v) => C("#5a3018") * (.85f + .3f * Mathf.PerlinNoise(u * 30, v * 30)), .1f),
-            new(0, .465f, 0), scale: new(.64f, .03f, .5f));
-        return root;
-    }
-
-    // cannolo: blistered golden shell, generous ricotta cream at both ends dotted with pistachio and chocolate
-    static GameObject Cannolo()
-    {
-        var root = new GameObject("Cannolo");
-        var body = Tilted(root, new(0, 0, 10), new(0, .24f, 0));
-        Part(body, Cylinder, Paint((u, v) =>
+        Spin(root, P(0, 0, .46f, 0, .48f, .03f, .44f, .05f, 0, .04f), Paint((u, v) =>
+            Dot(u, v, 40, 8, .25f, .2f, 5, out _) && v > .5f ? C("#8a5a3a") : C("#fbfbf7"), .7f)); // cocoa specks on the plate
+        var sponge = Paint((u, v) =>
         {
-            float n = Mathf.PerlinNoise(u * 40, v * 14);
-            return n > .64f ? C("#c98a3e") : Color.Lerp(C("#7a3c16"), C("#a8602a"), n); // fried shell with little blisters
-        }, .45f), Vector3.zero, new(0, 0, 90), new(.4f, .3f, .4f));
-        var cream = Plain(C("#fbf6ea"), .25f);
-        var pistachio = Plain(C("#7fb23e"), .3f);
-        var choc = Plain(C("#3b2416"), .3f);
-        foreach (float x in new[] { -.32f, .32f })
+            float fu = Mathf.Repeat(u * 4, 1) - .5f, fv = v - .5f; // four ladyfinger ends side by side
+            float r = fu * fu / .2f + fv * fv / .22f;
+            return r < 1 ? Color.Lerp(C("#b57a42"), C("#7a4522"), r * r) : C("#5e321a"); // soaked darker at the rim
+        }, .2f);
+        var cream = Paint((u, v) => C("#f7ecd6") * (.96f + .06f * Mathf.PerlinNoise(u * 12, v * 6)), .35f);
+        float y = .04f;
+        foreach (var (mat, h) in new[] { (sponge, .12f), (cream, .13f), (sponge, .12f), (cream, .14f) })
         {
-            Part(body, Sphere, cream, new(x + Mathf.Sign(x) * .06f, 0, 0), scale: new(.34f, .4f, .4f));
-            for (int k = 0; k < 7; k++)
-            {
-                float a = k * 0.9f;
-                var p = new Vector3(x + Mathf.Sign(x) * .2f, Mathf.Cos(a) * .12f, Mathf.Sin(a) * .12f);
-                Part(body, Sphere, k % 3 == 0 ? choc : pistachio, p, scale: Vector3.one * .07f);
-            }
+            Part(root, Cube, mat, new(0, y + h / 2, 0), scale: new(.58f, h, .46f));
+            y += h;
         }
+        Part(root, Cube, Paint((u, v) => C("#4a2412") * (.8f + .4f * Mathf.PerlinNoise(u * 40, v * 40)), .05f),
+            new(0, y + .015f, 0), scale: new(.6f, .03f, .48f)); // cocoa, a hair wider than the slice
+        var bean = Plain(C("#2e1608"), .6f);
+        Part(root, Sphere, bean, new(-.1f, y + .05f, -.05f), new(0, 30, 0), new(.09f, .05f, .065f));
+        Part(root, Sphere, bean, new(.06f, y + .05f, .06f), new(0, -40, 0), new(.09f, .05f, .065f));
         return root;
     }
 
-    // Parmigiano: tall wheel with its rind and stamped name, a wedge cut off leaning in front
+    // extra-virgin olive oil: tall slim dark green bottle with a long neck and a gold cap, cream label with a gold
+    // frame, the name and an olive branch
+    static GameObject OliveOil()
+    {
+        const float H = 1.45f, R = .2f, labelLo = .2f, labelHi = .55f, capFrom = 1.28f / H;
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) =>
+        {
+            if (v >= capFrom) return Ridged(C("#c9a24a"), u);
+            if (v < labelLo || v > labelHi) return C("#23401f") * Sheen(u);
+            float f = (v - labelLo) / (labelHi - labelLo);
+            if (f < .05f || f > .95f) return C("#c9a24a");
+            // olive branch under the name, on the front: a stem, two leaves, two olives
+            float du = Mathf.DeltaAngle(FrontU * 360, u * 360) / 360 * 2 * Mathf.PI * R / (H * (labelHi - labelLo)); // label heights
+            var p = new Vector2(du, f - .3f);
+            bool olive = (p - new Vector2(-.06f, -.02f)).sqrMagnitude < .004f || (p - new Vector2(.05f, -.05f)).sqrMagnitude < .004f;
+            bool leaf = Mathf.Pow((p.x + .12f) / .1f, 2) + Mathf.Pow((p.y - .08f) / .035f, 2) < 1
+                || Mathf.Pow((p.x - .11f) / .1f, 2) + Mathf.Pow((p.y - .05f) / .035f, 2) < 1;
+            bool stem = Mathf.Abs(p.y - .06f + p.x * .1f) < .01f && Mathf.Abs(p.x) < .2f;
+            return olive ? C("#3b4a1a") : leaf ? C("#6f8f3a") : stem ? C("#5a4a2a") : C("#f6efd9");
+        });
+        LatheText(cv, "OLIO", 2 * Mathf.PI * R, H, (labelLo + (labelHi - labelLo) * .72f) * H, (labelHi - labelLo) * H * .32f, C("#23401f"));
+        return Spun("OLIO", P(0, 0, .18f, 0, .2f, .03f, .2f, .9f, .17f, 1f, .1f, 1.08f, .07f, 1.14f, .07f, 1.28f, .085f, 1.29f, .085f, 1.43f,
+            .06f, 1.45f, 0, 1.45f), cv, .75f);
+    }
+
+    // mozzarella di bufala: a glossy white ball, pinched into a little knot on top where it was tied off, two basil
+    // leaves on it, in a blue-glazed bowl with a white rim
+    static GameObject Mozzarella()
+    {
+        var root = new GameObject("Mozzarella");
+        Spin(root, P(0, 0, .3f, 0, .32f, .03f, .44f, .2f, .46f, .24f, .42f, .24f, .3f, .08f, 0, .08f),
+            Paint((u, v) => v > .85f ? Color.white : C("#5c93cf"), .6f));
+        var moz = Plain(C("#fbfaf4"), .8f);
+        Spin(root, Ball(.34f, .4f, .82f), moz);
+        Spin(root, P(0, .66f, .06f, .66f, .04f, .72f, .05f, .76f, 0, .78f), moz); // the knot
+        var basil = Plain(C("#3f9a2e"), .55f);
+        Part(root, Sphere, basil, new(.09f, .67f, -.07f), new(0, 30, -14), new(.24f, .03f, .12f));
+        Part(root, Sphere, basil, new(-.07f, .67f, -.02f), new(0, -50, 12), new(.2f, .03f, .1f));
+        return root;
+    }
+
+    // Parmigiano Reggiano: a big wedge cut from the wheel, straw-coloured and crumbly inside with white crystals,
+    // the golden rind along its back dotted with the stamped name; two crumbs in front
     static GameObject Parmesan()
     {
         var root = new GameObject("Parmesan");
-        var cv = new Canvas(256, 256);
-        cv.Paint((u, v) => v > .08f && v < .92f
-            ? C("#e3b35a") * (.93f + .12f * (Dot(u, v, 40, 10, .5f, .25f, 3, out _) ? -.4f : Mathf.PerlinNoise(u * 50, v * 6)))
-            : C("#d39a45"));
-        LatheText(cv, "PARMIGIANO", 2 * Mathf.PI * .46f, .52f, .26f, .12f, C("#7a4a1c"));
-        Spin(root, P(0, 0, .43f, 0, .46f, .05f, .46f, .47f, .43f, .52f, 0, .52f), Textured(cv, .25f), new(0, 0, .25f));
-        var grain = Paint((u, v) => Dot(u, v, 16, 16, .5f, .3f, 9, out _) ? C("#f9e7b0") : C("#f0d68a"), .2f);
-        Part(root, Prism(new(-.28f, 0, -.62f), new(.28f, 0, -.62f), new(0, 0, -.25f), new(0, .4f, 0)), grain, Vector3.zero);
-        Part(root, Cube, Plain(C("#d39a45"), .25f), new(0, .2f, -.635f), scale: new(.58f, .4f, .03f)); // the wedge's rind
+        var grain = Paint((u, v) =>
+        {
+            if (Dot(u, v, 24, 24, .2f, .15f, 9, out _)) return C("#fff6dc"); // crystals
+            return Mathf.PerlinNoise(u * 18, v * 18) < .25f ? C("#e2c06e") : C("#f5dc94"); // little crevices
+        }, .15f, 256);
+        var rind = Paint((u, v) => v > .3f && v < .7f && Dot(u, v, 70, 12, .55f, .3f, 4, out _) ? C("#8a5a20")
+            : C("#d9a441") * (.92f + .12f * Mathf.PerlinNoise(u * 60, v * 8)), .25f, 256);
+        const float R = .76f, Rin = .7f, H = .6f, from = 62, span = 56; // centred on +Z: the point faces the player
+        Part(root, Lathe(P(0, 0, Rin, 0, Rin, H, 0, H), 16, 0, 0, from, span), grain, Vector3.zero);
+        Part(root, Lathe(P(Rin, 0, R, 0, R, H, Rin, H), 16, 0, 0, from, span), rind, Vector3.zero);
+        foreach (float d in new[] { from, from + span }) // the two cut faces
+            Part(root, Cube, grain, new(Mathf.Cos(d * Mathf.Deg2Rad) * R / 2, H / 2, Mathf.Sin(d * Mathf.Deg2Rad) * R / 2), new(0, -d, 0), new(R, H, .004f));
+        Part(root, Cube, grain, new(-.12f, .05f, -.12f), new(10, 30, 5), Vector3.one * .1f);
+        Part(root, Cube, grain, new(.1f, .04f, -.18f), new(-8, 70, 12), Vector3.one * .08f);
         return root;
     }
 
-    // salami lying with its string, cut end showing the marbled inside, two slices flat in front
+    // pesto alla genovese: squat glass jar showing the green sauce (basil flecks, a little oil), navy screw lid,
+    // navy label with the name over a gold rule
+    static GameObject Pesto()
+    {
+        const float H = .74f, R = .39f, labelLo = .12f, labelHi = .44f, lidFrom = .56f / H;
+        var navy = C("#1d2f6b");
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) =>
+        {
+            if (v >= lidFrom) return Ridged(navy, u) * .85f;
+            float y = v * H;
+            if (y > labelLo && y < labelHi) return Mathf.Abs(y - labelLo - .06f) < .008f ? C("#d9b44a") : navy;
+            return (Dot(u, v, 40, 14, .5f, .3f, 8, out float k) ? (k < .25f ? C("#9cb84a") : C("#355f1c")) : C("#5a8a2a")) * Sheen(u);
+        });
+        LatheText(cv, "PESTO", 2 * Mathf.PI * R, H, .32f, .13f, Color.white);
+        return Spun("PESTO", P(0, 0, .36f, 0, .38f, .03f, .39f, .08f, .39f, .48f, .35f, .54f, .32f, .56f, .36f, .57f, .37f, .58f,
+            .37f, .72f, .35f, .74f, 0, .74f), cv, .6f);
+    }
+
+    // salami lying on a wooden board with its string, cut end showing the marbled inside, two slices in front
     static GameObject Salami()
     {
         var root = new GameObject("Salami");
@@ -261,17 +316,20 @@ public static partial class Products
         Part(root, Cube, Plain(Color.white, .2f), new(-.6f, .17f, .1f), scale: new(.1f, .05f, .05f)); // string
         Part(root, Cylinder, marbled, new(-.1f, .02f, -.28f), scale: new(.32f, .02f, .32f));
         Part(root, Cylinder, marbled, new(.24f, .045f, -.3f), new(6, 0, 0), new(.32f, .02f, .32f));
+        Part(root, Cube, Paint((u, v) => Color.Lerp(C("#c08a52"), C("#a5703c"), Mathf.PerlinNoise(u * 2, v * 30)), .25f),
+            new(-.08f, -.03f, -.1f), scale: new(1.4f, .06f, .75f)); // wooden board
         return root;
     }
 
-    // panettone: tall loaf in its golden paper, dark domed top split in a cross, a few raisins
+    // panettone: about as wide as tall, a short pleated paper case, the dark dome puffing out over it like a mushroom,
+    // split in a cross on top, a few raisins
     static GameObject Panettone()
     {
         var root = new GameObject("Panettone");
-        Spin(root, P(0, 0, .3f, 0, .3f, .7f, .33f, .78f, .29f, .92f, .17f, 1f, 0, 1.02f), Paint((u, v) =>
+        Spin(root, P(0, 0, .42f, 0, .42f, .5f, .46f, .54f, .47f, .6f, .43f, .71f, .31f, .81f, .15f, .87f, 0, .88f), Paint((u, v) =>
         {
-            if (v < .69f) return C("#c9a04a") * (Mathf.Repeat(u * 24, 1) < .5f ? 1f : .88f) * (Mathf.Abs(v - .35f) < .06f ? .75f : 1f); // pleated paper
-            if (Mathf.Abs(Mathf.Repeat(u * 4, 1) - .5f) < .03f && v > .85f) return C("#e9c27a"); // the cross cut
+            if (v < .57f) return C("#c9a04a") * (Mathf.Repeat(u * 24, 1) < .5f ? 1f : .88f) * (Mathf.Abs(v - .3f) < .05f ? .75f : 1f); // pleated paper
+            if (Mathf.Abs(Mathf.Repeat(u * 4, 1) - .5f) < .03f && v > .88f) return C("#e9c27a"); // the cross cut
             if (Dot(u, v, 18, 8, .25f, .25f, 13, out _)) return C("#3b1a10"); // raisins
             return Color.Lerp(C("#7a3e15"), C("#b8682a"), Mathf.PerlinNoise(u * 16, v * 16));
         }, .35f, 256));
@@ -282,15 +340,29 @@ public static partial class Products
 
     static Color Rice => C("#fbfbf6");
 
-    static Material RiceMat() => Paint((u, v) => Dot(u, v, 18, 18, .5f, .3f, 4, out _) ? C("#ecebe2") : Rice, .25f);
+    // packed grains: white ovals with thin grey gaps between them
+    static Color RiceGrain(float u, float v) => Dot(u, v, 28, 28, .9f, .42f, 4, out _) ? Rice : C("#efeee6");
+    static Material RiceMat() => Paint(RiceGrain, .25f, 256);
 
-    // two maki rolls: nori outside, rice, salmon in the middle
+    // white plate with a blue rim, squashed to an oval (sx, sz), a dab of wasabi and pink pickled ginger at the front
+    static void SushiPlate(GameObject root, float sx, float sz)
+    {
+        Spin(root, P(0, 0, .46f, 0, .48f, .03f, .44f, .05f, 0, .04f), Plain(C("#fbfbf7"), .7f), scale: new(sx, 1, sz));
+        Spin(root, Torus(.45f, .016f), Plain(C("#2b4a8a"), .5f), new(0, .025f, 0), scale: new(sx, 1, sz));
+        Part(root, Sphere, Plain(C("#9bc43c"), .3f), new(.48f * sx - .22f, .07f, -.48f * sz + .16f), scale: new(.12f, .07f, .1f));
+        var ginger = Plain(C("#f2b3b8"), .4f);
+        Part(root, Cylinder, ginger, new(.48f * sx - .38f, .055f, -.48f * sz + .18f), new(8, 0, 0), new(.13f, .006f, .1f));
+        Part(root, Cylinder, ginger, new(.48f * sx - .34f, .065f, -.48f * sz + .2f), new(-6, 30, 0), new(.12f, .006f, .09f));
+    }
+
+    // two maki rolls on a plate: nori outside, rice, salmon and cucumber in the middle
     static GameObject Maki()
     {
         var root = new GameObject("Maki");
+        SushiPlate(root, 1.6f, 1.15f);
         foreach (float x in new[] { -.3f, .3f })
         {
-            var at = new Vector3(x, 0, x * .3f);
+            var at = new Vector3(x, .04f, x * .3f + .08f);
             Spin(root, P(0, 0, .28f, 0, .28f, .4f, 0, .4f), Plain(C("#1f2f24"), .45f), at);
             Spin(root, P(0, .4f, .25f, .4f, .25f, .42f, 0, .42f), RiceMat(), at);
             Spin(root, P(0, .42f, .085f, .42f, .085f, .435f, 0, .435f), Plain(C("#ff8a5c"), .5f), at + new Vector3(-.04f, 0, .03f));
@@ -299,23 +371,84 @@ public static partial class Products
         return root;
     }
 
-    // rice block with a striped salmon slice and a nori band
+    // salmon nigiri on a plate: an oval of rice, a soft rounded slice of salmon draped over it, its fat lines across
     static GameObject Nigiri()
     {
         var root = new GameObject("Nigiri");
-        Spin(root, Capsule(.72f, .17f), RiceMat(), new(.36f, .15f, 0), new(0, 0, 90), scale: new(1, 1, 1.25f));
-        Part(root, Cube, Paint((u, v) => Mathf.Repeat(u * 6 + v * 2, 1) < .16f ? C("#ffd6c4") : C("#ff7a4a"), .6f),
-            new(0, .33f, 0), new(0, 0, -4), new(.86f, .08f, .44f));
-        Part(root, Cube, Plain(C("#1f2f24"), .4f), new(0, .26f, 0), scale: new(.14f, .2f, .48f));
+        SushiPlate(root, 1.35f, 1f);
+        Spin(root, Capsule(.72f, .17f), RiceMat(), new(.36f, .21f, .06f), new(0, 0, 90), scale: new(1, 1, 1.25f));
+        // the slice: a flattened capsule longer than the rice, bent so both ends hang down over it; bright orange with
+        // a few wide, soft white fat lines slanting across
+        var slice = Lathe(Capsule(.9f, .14f), 28);
+        var vs = slice.vertices;
+        for (int i = 0; i < vs.Length; i++) vs[i].x -= .75f * Mathf.Pow((vs[i].y - .45f) / .45f, 2); // local x ends up as height (squashed below)
+        slice.vertices = vs;
+        slice.RecalculateNormals();
+        slice.RecalculateBounds();
+        Part(root, slice, Paint((u, v) =>
+        {
+            float fat = Mathf.Clamp01(1 - Mathf.Abs(Mathf.Repeat(v * 5 + u * .6f, 1) - .5f) / .09f);
+            return Color.Lerp(Color.Lerp(C("#ff6a2a"), C("#ff9350"), Mathf.PerlinNoise(u * 6, v * 6)), C("#ffe6d6"), fat * .9f);
+        }, .75f, 256), new(.45f, .42f, .06f), new(0, 0, 90), new(.2f, 1, 1.55f)); // thin: about a sixth of the rice's height
         return root;
     }
 
-    // triangle of rice wrapped at the bottom in nori
+    // onigiri: a thick triangle of packed rice, corners and edges just rounded, a tall strip of nori wrapped round its base
     static GameObject Onigiri()
     {
         var root = new GameObject("Onigiri");
-        Part(root, Prism(new(-.42f, 0, -.16f), new(.42f, 0, -.16f), new(0, .72f, -.16f), new(0, 0, .32f)), RiceMat(), Vector3.zero);
-        Part(root, Cube, Plain(C("#1f2f24"), .4f), new(0, .15f, 0), scale: new(.36f, .3f, .34f));
+        const int N = 60, M = 10;
+        const float depth = .2f, R = .5f;
+        // the outline: a triangle (corner up) blended with a circle, which rounds its corners
+        var outline = new Vector2[N + 1];
+        for (int i = 0; i <= N; i++)
+        {
+            float t = i * 2 * Mathf.PI / N, phi = Mathf.Repeat(t - Mathf.PI / 2, 2 * Mathf.PI / 3) - Mathf.PI / 3;
+            float r = Mathf.Lerp(.5f / Mathf.Cos(phi), .75f, .2f) * R;
+            outline[i] = new Vector2(Mathf.Cos(t), Mathf.Sin(t)) * r;
+        }
+        float lift = -outline.Min(p => p.y);
+        var c = new Vector2(0, lift);
+        var verts = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var tris = new List<int>();
+        // rings from front to back, pulled in toward the edges for a pillowy rim; uv = position, so the nori lines up
+        for (int j = 0; j <= M; j++)
+        {
+            float s = -1 + 2f * j / M, f = .7f + .3f * Mathf.Sqrt(1 - s * s);
+            foreach (var o in outline)
+            {
+                var p = c + o * f;
+                verts.Add(new Vector3(p.x, p.y, s * depth));
+                uvs.Add(new Vector2(p.x + .5f, p.y));
+            }
+        }
+        int capF = verts.Count, capB = capF + 1;
+        verts.Add(new Vector3(c.x, c.y, -depth - .03f));
+        verts.Add(new Vector3(c.x, c.y, depth + .03f));
+        uvs.Add(new Vector2(c.x + .5f, c.y));
+        uvs.Add(new Vector2(c.x + .5f, c.y));
+        var center = new Vector3(c.x, c.y, 0);
+        void Tri(int a, int b, int d) // wound to face outwards
+        {
+            bool outward = Vector3.Dot(Vector3.Cross(verts[b] - verts[a], verts[d] - verts[a]), (verts[a] + verts[b] + verts[d]) / 3 - center) > 0;
+            tris.AddRange(outward ? new[] { a, b, d } : new[] { a, d, b });
+        }
+        int row = N + 1;
+        for (int i = 0; i < N; i++)
+        {
+            for (int j = 0; j < M; j++)
+            {
+                int a = j * row + i, b = a + row;
+                Tri(a, b, a + 1);
+                Tri(a + 1, b, b + 1);
+            }
+            Tri(capF, i, i + 1);
+            Tri(capB, M * row + i, M * row + i + 1);
+        }
+        // a tall rectangle of nori over the bottom middle, front, back and underneath; the rice grains everywhere else
+        Part(root, Finish(verts, uvs, tris), Paint((u, v) => Mathf.Abs(u - .5f) < .2f && v < .36f
+            ? C("#1c2a20") * (.85f + .3f * Mathf.PerlinNoise(u * 40, v * 40)) : RiceGrain(u, v), .3f, 256), Vector3.zero);
         return root;
     }
 
@@ -356,65 +489,137 @@ public static partial class Products
         return root;
     }
 
-    // lacquered box: rice with a pickled plum, salmon, tamago, broccoli
+    // bento: an open box, black lacquer outside and red inside, a divider down the middle. Left: a mound of rice with
+    // a pickled plum and sesame. Right: grilled salmon, two slices of rolled omelette, fried chicken on lettuce,
+    // broccoli and a cherry tomato, all heaped a little above the rim.
     static GameObject Bento()
     {
         var root = new GameObject("Bento");
-        Part(root, Cube, Plain(C("#b3202a"), .6f), new(0, .11f, 0), scale: new(.92f, .22f, .64f));
-        var black = Plain(C("#1f1f24"), .6f);
-        Part(root, Cube, black, new(0, .2f, 0), scale: new(.84f, .06f, .56f));
-        Part(root, Cube, black, new(.02f, .26f, 0), scale: new(.03f, .08f, .56f)); // divider
-        Part(root, Cube, RiceMat(), new(-.2f, .26f, 0), scale: new(.38f, .08f, .52f));
-        Part(root, Sphere, Plain(C("#c2183a"), .6f), new(-.2f, .31f, 0), scale: Vector3.one * .1f);
-        Part(root, Cube, Plain(C("#ff8a5c"), .5f), new(.22f, .27f, -.13f), scale: new(.34f, .09f, .22f));
-        Part(root, Cube, Plain(C("#ffd23f"), .4f), new(.3f, .28f, .14f), scale: new(.18f, .11f, .2f));
-        var green = Plain(C("#3e9b3a"), .3f);
-        for (int i = 0; i < 4; i++)
-            Part(root, Sphere, green, new(.12f + (i % 2) * .06f, .3f, .1f + (i / 2) * .07f), scale: Vector3.one * .09f);
+        var black = Plain(C("#1c1c22"), .75f);
+        var red = Plain(C("#b3202a"), .6f);
+        Part(root, Cube, black, new(0, .02f, 0), scale: new(1f, .04f, .7f));
+        foreach (int s in new[] { -1, 1 })
+        {
+            Part(root, Cube, black, new(0, .13f, s * .33f), scale: new(1f, .26f, .04f));
+            Part(root, Cube, black, new(s * .48f, .13f, 0), scale: new(.04f, .26f, .62f));
+            Part(root, Cube, red, new(0, .14f, s * .307f), scale: new(.92f, .24f, .005f)); // red lining
+            Part(root, Cube, red, new(s * .457f, .14f, 0), scale: new(.005f, .24f, .62f));
+        }
+        Part(root, Cube, red, new(0, .045f, 0), scale: new(.92f, .01f, .62f));
+        Part(root, Cube, red, new(0, .13f, 0), scale: new(.02f, .22f, .62f)); // divider
+
+        // rice, domed, a few sesame seeds, the plum in the middle
+        var rice = Paint((u, v) => Dot(u, v, 14, 14, .12f, .12f, 17, out _) ? C("#2a2a2a") : RiceGrain(u, v), .25f, 256);
+        Part(root, Cube, rice, new(-.24f, .14f, 0), scale: new(.42f, .18f, .6f));
+        Part(root, Sphere, rice, new(-.24f, .23f, 0), scale: new(.42f, .09f, .58f));
+        Part(root, Sphere, Plain(C("#b8182e"), .45f), new(-.24f, .28f, 0), scale: new(.11f, .09f, .11f));
+
+        // back: grilled salmon, two slices of tamagoyaki
+        Part(root, Cube, Paint((u, v) => Mathf.Repeat(u * 4 + v * 4, 1) < .12f ? C("#8a3a1e")
+            : Color.Lerp(C("#f08a5c"), C("#f6a882"), Mathf.PerlinNoise(u * 8, v * 8)), .4f), new(.12f, .22f, .16f), new(0, 12, 0), new(.2f, .14f, .22f));
+        var tamago = Paint((u, v) => Mathf.Repeat(new Vector2(u - .5f, v - .5f).magnitude * 6, 1) < .2f ? C("#f7e08a") : C("#f5c33a"), .35f);
+        foreach (float x in new[] { .3f, .41f })
+            Part(root, Cube, tamago, new(x, .22f, .16f), new(0, 0, x > .35f ? -6 : 4), new(.09f, .13f, .2f));
+
+        // front: fried chicken on a lettuce leaf, broccoli, a cherry tomato
+        Part(root, Sphere, Plain(C("#7cc24a"), .35f), new(.14f, .2f, -.15f), new(0, 20, 6), new(.26f, .05f, .22f));
+        var karaage = Paint((u, v) => Color.Lerp(C("#9a521c"), C("#d38c3c"), Mathf.PerlinNoise(u * 20, v * 20)), .35f);
+        foreach (var p in new Vector3[] { new(.08f, .25f, -.12f), new(.19f, .25f, -.2f), new(.17f, .28f, -.08f) })
+            Part(root, Sphere, karaage, p, new(20, p.x * 300, 0), new(.13f, .11f, .12f));
+        var broccoli = Plain(C("#3e8f2e"), .3f);
+        foreach (var p in new Vector3[] { new(.36f, .27f, -.12f), new(.41f, .26f, -.18f), new(.33f, .25f, -.19f), new(.39f, .29f, -.15f) })
+            Part(root, Sphere, broccoli, p, scale: Vector3.one * .085f);
+        Part(root, Sphere, Plain(C("#e3261c"), .8f), new(.4f, .25f, -.02f), scale: Vector3.one * .1f);
         return root;
     }
 
-    // matcha: wide tea bowl with a dark glaze dripping from the rim, bright frothy tea, bamboo whisk beside it
+    // matcha: a wide, shallow cream tea bowl with a brown foot, filled near the rim with bright green froth swirled by
+    // the whisk; the bamboo whisk standing beside it (handle, then fine prongs flaring into a bulb), the bamboo scoop
+    // lying in front
     static GameObject Matcha()
     {
         var root = new GameObject("Matcha");
-        Spin(root, P(0, 0, .2f, 0, .24f, .04f, .4f, .2f, .43f, .34f, .41f, .36f, .39f, .3f, 0, .3f), Paint((u, v) =>
+        Spin(root, P(0, 0, .18f, 0, .22f, .04f, .4f, .16f, .46f, .3f, .45f, .32f, .43f, .28f, 0, .27f), Paint((u, v) =>
+            v < .15f ? C("#8a6a4a") : C("#ece2cc") * (.94f + .1f * Mathf.PerlinNoise(u * 30, v * 10)), .55f));
+        Part(root, Cylinder, Paint((u, v) =>
         {
-            float drip = .72f - .14f * Mathf.Pow(Mathf.Abs(Mathf.Sin(u * Mathf.PI * 7)), 4);
-            return v > drip ? C("#3e3a34") : C("#c2a27a") * (.9f + .15f * Mathf.PerlinNoise(u * 20, v * 8));
-        }, .55f));
-        Part(root, Cylinder, Paint((u, v) => Dot(u, v, 14, 14, .5f, .3f, 7, out _) ? C("#c9e48a") : C("#8fc24a"), .35f),
-            new(0, .31f, 0), scale: new(.78f, .01f, .78f));
-        Spin(root, P(0, 0, .11f, 0, .13f, .24f, .06f, .34f, .06f, .62f, 0, .62f), Plain(C("#e3cf96"), .3f), new(.56f, 0, .1f), ribs: 18, ribAmp: .18f);
+            var p = new Vector2(u - .5f, v - .5f);
+            float swirl = Mathf.Abs(Mathf.Sin(p.magnitude * 30 + Mathf.Atan2(p.y, p.x) * 2)); // whisk marks
+            if (Dot(u, v, 30, 30, .4f, .25f, 7, out _)) return C("#c9e68e"); // little bubbles
+            return Color.Lerp(C("#6fae2e"), C("#a6d65a"), swirl * .6f + .3f * Mathf.PerlinNoise(u * 10, v * 10));
+        }, .45f, 256), new(0, .29f, 0), scale: new(.86f, .01f, .86f));
+
+        var bamboo = Plain(C("#e7d49e"), .35f);
+        var whisk = new Vector3(.62f, 0, .08f);
+        Spin(root, P(0, 0, .075f, 0, .075f, .22f, 0, .22f), Paint((u, v) => Mathf.Abs(v - .45f) < .04f ? C("#b89a5a") : C("#e2cc90"), .35f), whisk); // handle with its node
+        Part(root, Cylinder, bamboo, whisk + new Vector3(0, .32f, 0), scale: new(.08f, .1f, .08f)); // the inner prongs
+        for (int i = 0; i < 18; i++)
+        {
+            float a = i * 20 * Mathf.Deg2Rad;
+            var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+            Vector3 p1 = whisk + d * .06f + Vector3.up * .22f, p2 = whisk + d * .16f + Vector3.up * .44f, p3 = whisk + d * .1f + Vector3.up * .56f;
+            foreach (var (lo, hi) in new[] { (p1, p2), (p2, p3) })
+                Part(root, Cube, bamboo, (lo + hi) / 2, Quaternion.FromToRotation(Vector3.up, hi - lo).eulerAngles,
+                    new(.016f, (hi - lo).magnitude + .01f, .016f));
+        }
+        Part(root, Cube, Plain(C("#c9a86a"), .35f), new(.05f, .01f, -.5f), new(0, 18, 0), new(.55f, .015f, .045f)); // scoop
         return root;
     }
 
-    // six octopus balls in a little boat tray: sauce, mayo, green flakes
+    // takoyaki: six golden octopus balls packed in a pointed wooden boat tray with upturned ends, glossy dark sauce
+    // dripping down from their tops, a zigzag of mayo across, green seaweed and bonito flakes, a toothpick in one
     static GameObject Takoyaki()
     {
         var root = new GameObject("Takoyaki");
-        var wood = Plain(C("#e2c08c"), .2f);
-        Part(root, Cube, wood, new(0, .04f, 0), scale: new(.98f, .08f, .62f));
-        foreach (float z in new[] { -.3f, .3f }) Part(root, Cube, wood, new(0, .1f, z), scale: new(.98f, .14f, .03f));
-        var ball = Plain(C("#c27a35"), .4f);
-        var sauce = Plain(C("#5a2a12"), .7f);
+        // the boat: sections along x, flat bottom, flared walls, pointed and lifted at both ends; thin veneer, both sides
+        const int N = 24;
+        float L = .62f, wall = .13f;
+        var verts = new List<Vector3>();
+        var uvs = new List<Vector2>();
+        var tris = new List<int>();
+        for (int side = 0; side < 2; side++)
+        {
+            int start = verts.Count;
+            for (int i = 0; i <= N; i++)
+            {
+                float x = Mathf.Lerp(-L, L, (float)i / N), f = x / L, w = .33f * (1 - f * f), lift = .1f * f * f * f * f;
+                var ring = new[] { new Vector3(x, wall + lift, -w), new Vector3(x, lift, -w * .72f), new Vector3(x, lift, w * .72f), new Vector3(x, wall + lift, w) };
+                for (int k = 0; k < 4; k++)
+                {
+                    verts.Add(ring[k]);
+                    uvs.Add(new Vector2((float)i / N, k / 3f));
+                }
+            }
+            for (int i = 0; i < N; i++)
+                for (int k = 0; k < 3; k++)
+                {
+                    int a = start + i * 4 + k, b = a + 4;
+                    tris.AddRange(side == 0 ? new[] { a, a + 1, b + 1, a, b + 1, b } : new[] { a, b + 1, a + 1, a, b, b + 1 });
+                }
+        }
+        Part(root, Finish(verts, uvs, tris), Paint((u, v) => Color.Lerp(C("#f6d9a0"), C("#e6bf7e"), Mathf.PerlinNoise(u * 40, v * 3)), .25f), Vector3.zero);
+
+        // the balls: golden, the sauce poured over their tops and running down in drips
+        var ball = Paint((u, v) => v > .74f + .06f * Mathf.Sin(u * 2 * Mathf.PI * 6) ? C("#4a1e0c")
+            : Color.Lerp(C("#b8702e"), C("#e3a85a"), Mathf.PerlinNoise(u * 12, v * 12)), .6f);
         for (int i = 0; i < 6; i++)
-        {
-            var p = new Vector3((i % 3 - 1) * .3f, .2f, (i / 3 - .5f) * .27f);
-            Part(root, Sphere, ball, p, scale: Vector3.one * .3f);
-            Part(root, Sphere, sauce, p + new Vector3(0, .09f, 0), scale: new(.24f, .1f, .24f));
-        }
+            Part(root, Sphere, ball, new((i % 3 - 1) * .26f, .165f, (i / 3 - .5f) * .26f), new(0, i * 60, 0), Vector3.one * .3f);
+        // mayo zigzag over the top
         var mayo = Plain(Color.white, .5f);
-        for (int k = 0; k < 3; k++)
-            Part(root, Cube, mayo, new(-.3f + k * .3f, .33f, 0), new(0, 35, 0), new(.03f, .02f, .55f));
-        var bonito = Plain(C("#e8c79a"), .2f);
-        var aonori = Plain(C("#3e7a2a"), .3f);
-        for (int k = 0; k < 14; k++) // bonito flakes and seaweed sprinkled on top
+        for (int k = 0; k < 4; k++)
         {
-            var p = new Vector3((Hash(k, 1, 3) - .5f) * .8f, .36f, (Hash(k, 2, 3) - .5f) * .45f);
-            if (k % 2 == 0) Part(root, Cube, bonito, p, new(Hash(k, 3, 3) * 60, Hash(k, 4, 3) * 180, 20), new(.1f, .008f, .07f));
-            else Part(root, Sphere, aonori, p + new Vector3(0, .01f, 0), scale: Vector3.one * .035f);
+            Vector3 p = new(-.36f + k * .18f, .315f, k % 2 == 0 ? -.13f : .13f), q = new(-.36f + (k + 1) * .18f, .315f, k % 2 == 0 ? .13f : -.13f);
+            Part(root, Cube, mayo, (p + q) / 2, new(0, -Mathf.Atan2(q.z - p.z, q.x - p.x) * Mathf.Rad2Deg, 0), new((q - p).magnitude, .012f, .016f));
         }
+        var bonito = Plain(C("#e3b98e"), .2f);
+        var aonori = Plain(C("#3e7a2a"), .3f);
+        for (int k = 0; k < 16; k++) // bonito flakes and seaweed sprinkled on top
+        {
+            var p = new Vector3((Hash(k, 1, 3) - .5f) * .7f, .3f, (Hash(k, 2, 3) - .5f) * .4f);
+            if (k % 2 == 0) Part(root, Cube, bonito, p, new(Hash(k, 3, 3) * 50, Hash(k, 4, 3) * 180, 20), new(.08f, .006f, .06f));
+            else Part(root, Sphere, aonori, p + new Vector3(0, .01f, 0), scale: Vector3.one * .03f);
+        }
+        Part(root, Cylinder, Plain(C("#efe2bf"), .3f), new(.33f, .34f, .12f), new(0, 0, -28), new(.014f, .12f, .014f)); // toothpick
         return root;
     }
 
@@ -439,45 +644,84 @@ public static partial class Products
         return root;
     }
 
-    // ramune: codd-neck bottle of pale blue glass, the marble caught in its pinched neck, blue wrap label
-    static GameObject Ramune()
-    {
-        var root = new GameObject("Ramune");
-        var cv = new Canvas(256, 256);
-        cv.Paint((u, v) => v > .16f && v < .42f ? C("#2f7ae5") : C("#bfe3e6") * Sheen(u) * (v < .55f ? .9f : 1f));
-        LatheText(cv, "RAMUNE", 2 * Mathf.PI * .26f, 1.12f, .32f, .14f, Color.white);
-        Spin(root, P(0, 0, .24f, 0, .26f, .04f, .26f, .58f, .2f, .7f, .1f, .78f, .15f, .86f, .09f, .95f, .11f, 1.02f, .1f, 1.12f, 0, 1.12f), Textured(cv, .85f));
-        Part(root, Sphere, Plain(C("#e6f6ff"), .95f), new(0, .86f, 0), scale: Vector3.one * .2f); // the marble
-        Spin(root, P(0, 1.08f, .12f, 1.08f, .12f, 1.16f, 0, 1.16f), Plain(C("#2f7ae5"), .5f)); // cap
-        return root;
-    }
-
-    // three gyoza on a black plate: pleated crescents, crisp golden undersides, a little dish of soy sauce
+    // gyoza: five pleated crescents fanned round a white plate, pale skin with a frilled seam on top, crisp golden-brown
+    // undersides, flecks of spring onion; a little dish of soy sauce in the middle
     static GameObject Gyoza()
     {
         var root = new GameObject("Gyoza");
-        Part(root, Cube, Plain(C("#1f1f24"), .6f), new(0, .03f, 0), scale: new(1f, .06f, .66f));
-        var mat = Paint((u, v) => Mathf.Sin(2 * Mathf.PI * u) < -.2f ? C("#b06a2a") : C("#f5e6c8") * (Mathf.Repeat(v * 9, 1) < .15f ? .9f : 1f), .4f);
-        float Radius(float t) => .17f * Mathf.Pow(Mathf.Abs(Mathf.Sin(Mathf.PI * t)), .5f) * (1 + .12f * Mathf.Abs(Mathf.Sin(t * 28)));
-        foreach (float z in new[] { -.18f, 0, .18f })
-            Part(root, Sweep(t => new Vector3(Mathf.Lerp(-.38f, .28f, t), .06f + Radius(t) * .65f, z - .06f * Mathf.Sin(Mathf.PI * t)), Radius, .75f), mat, Vector3.zero);
-        Spin(root, P(0, .06f, .08f, .06f, .12f, .14f, 0, .12f), Plain(Color.white, .7f), new(.4f, 0, .16f)); // soy dish
-        Part(root, Cylinder, Plain(C("#2a120a"), .9f), new(.4f, .125f, .16f), scale: new(.18f, .004f, .18f));
+        Spin(root, P(0, 0, .46f, 0, .48f, .03f, .44f, .05f, 0, .04f), Plain(C("#fbfbf7"), .7f), scale: new(1.3f, 1, 1.3f));
+        Spin(root, Torus(.45f, .016f), Plain(C("#2b4a8a"), .5f), new(0, .025f, 0), scale: new(1.3f, 1, 1.3f));
+        var skin = Paint((u, v) =>
+        {
+            float s = Mathf.Sin(2 * Mathf.PI * u); // -1 underneath, 1 on top
+            if (s < -.1f) return Color.Lerp(C("#d9994a"), C("#8f5320"), -s); // pan-fried crust
+            if (s > .3f && Dot(u, v, 10, 30, .15f, .3f, 5, out _)) return C("#5aa83a"); // spring onion
+            return C("#f3e3c2") * (Mathf.Repeat(v * 9, 1) < .15f ? .9f : 1f);
+        }, .45f);
+        float Radius(float t) => .17f * Mathf.Pow(Mathf.Abs(Mathf.Sin(Mathf.PI * t)), .5f);
+        Vector3 Spine(float t) => new(Mathf.Lerp(-.33f, .33f, t), .06f + Radius(t) * .65f, -.07f * Mathf.Sin(Mathf.PI * t));
+        var body = Sweep(Spine, Radius, .75f);
+        var seam = Sweep(t => Spine(t) + Vector3.up * Radius(t) * .68f, // the pleated frill along the top
+            t => .035f * Mathf.Pow(Mathf.Abs(Mathf.Sin(Mathf.PI * t)), .5f) * (1 + .6f * Mathf.Abs(Mathf.Sin(t * 28))), 1.6f);
+        for (int k = 0; k < 5; k++)
+        {
+            float a = k * 72 + 18;
+            var g = Tilted(root, new(0, a, 0), Quaternion.Euler(0, a, 0) * Vector3.back * .38f); // convex side outwards
+            g.transform.localScale = Vector3.one * .78f;
+            Part(g, body, skin, Vector3.zero);
+            Part(g, seam, skin, Vector3.zero);
+        }
+        Spin(root, P(0, .04f, .1f, .04f, .14f, .13f, 0, .11f), Plain(Color.white, .7f)); // soy dish
+        Part(root, Cylinder, Plain(C("#2a120a"), .9f), new(0, .115f, 0), scale: new(.22f, .004f, .22f));
         return root;
     }
 
-    // edamame: bright green pods, each bulging over its three beans, piled in a small blue bowl
-    static GameObject Edamame()
+    // soy sauce: the classic table dispenser, a glass bottle wide at the base and narrowing steadily to its neck,
+    // near-black sauce up to the shoulder, a small white label; a flat-topped red cylinder cap with its little spout
+    static GameObject SoySauce()
     {
-        var root = new GameObject("Edamame");
-        Spin(root, P(0, 0, .2f, 0, .24f, .04f, .4f, .22f, .42f, .26f, .38f, .24f, 0, .2f), Paint((u, v) => v > .8f ? Color.white : C("#2f6fb8"), .6f));
-        var pod = Plain(C("#86c84a"), .35f);
-        for (int i = 0; i < 6; i++)
+        const float H = .8f, R = .27f, labelLo = .14f, labelHi = .3f, level = .6f;
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) =>
         {
-            float a = i * 1.05f;
-            var p = Tilted(root, new(10 + (i % 2) * 15, a * 57, 0), new(Mathf.Cos(a) * .14f, .26f + (i % 3) * .05f, Mathf.Sin(a) * .12f));
-            for (int b = 0; b < 3; b++) // the beans' bumps
-                Part(p, Sphere, pod, new((b - 1) * .1f, 0, 0), scale: new(.15f, .1f, .12f));
+            float y = v * H;
+            if (y > labelLo && y < labelHi) return Color.white;
+            return y < level ? C("#2a120a") * (Sheen(u) * 1.4f) : C("#d4dde0") * Sheen(u); // sauce, then empty glass
+        });
+        LatheText(cv, "SOJA", 2 * Mathf.PI * R, H, (labelLo + labelHi) / 2, .1f, C("#d7192a"));
+        var root = Spun("SOJA", P(0, 0, .24f, 0, .27f, .03f, .27f, .12f, .25f, .3f, .2f, .5f, .155f, .66f, .13f, .76f, .13f, H, 0, H), cv, .85f);
+        var red = Plain(C("#d7192a"), .55f);
+        Spin(root, P(0, .76f, .145f, .76f, .15f, .78f, .15f, .93f, .14f, .95f, 0, .95f), red); // the cap
+        Part(root, Cylinder, red, new(.06f, .97f, -.08f), scale: new(.045f, .025f, .045f)); // spout at the front edge
+        return root;
+    }
+
+    // yakitori (beef-wrapped cheese): three skewers lying diagonally on a round cream plate dotted with sauce, each a long
+    // roll of thin beef lacquered dark and glossy in tare and sprinkled with sesame, closed at the back, a bulge of
+    // golden melting cheese at the front where the stick comes out
+    static GameObject Yakitori()
+    {
+        var root = new GameObject("Yakitori");
+        Spin(root, P(0, 0, .46f, 0, .48f, .03f, .44f, .05f, 0, .04f), Plain(C("#efe8da"), .6f), scale: new(1.15f, 1, 1.15f));
+        foreach (var (x, z, r) in new[] { (-.42f, -.3f, .05f), (.38f, -.36f, .035f), (.45f, .18f, .04f) }) // drips of tare on the plate
+            Part(root, Sphere, Plain(C("#3e170a"), .9f), new(x, .045f, z), scale: new(r, .008f, r * .8f));
+        var beef = Paint((u, v) =>
+        {
+            if (Dot(u, v, 10, 26, .35f, .22f, 4, out _)) return C("#f3e6c4"); // sesame
+            return Mathf.PerlinNoise(u * 5, v * 8) < .3f ? C("#2a0e05") : Color.Lerp(C("#3e170a"), C("#74341a"), Mathf.PerlinNoise(u * 4, v * 20));
+        }, .85f, 256);
+        var roll = Sweep(t => new Vector3(.01f * Mathf.Sin(t * 9), 0, Mathf.Lerp(-.2f, .32f, t)),
+            t => .11f * (.92f + .08f * Mathf.Sin(t * 23)) * Mathf.Pow(Mathf.Abs(Mathf.Cos(t * Mathf.PI / 2)), .35f), .85f); // closed at the back
+        var cheese = Paint((u, v) => Color.Lerp(C("#f2c23a"), C("#fbe39a"), Mathf.PerlinNoise(u * 6, v * 6)), .8f);
+        var stick = Plain(C("#ecdcae"), .3f);
+        var group = Tilted(root, new(0, 75, 0), Vector3.zero); // rolls across the view (which looks along local (.57, 0, -.82)), a little diagonal
+        for (int i = 0; i < 3; i++)
+        {
+            var s = Tilted(group, new(0, (Hash(i, 1, 7) - .5f) * 10, 0), new(-.27f + i * .27f, .14f, (Hash(i, 2, 7) - .5f) * .08f));
+            Part(s, roll, beef, Vector3.zero);
+            Part(s, Sphere, cheese, new(0, -.005f, -.22f), scale: new(.24f, .19f, .2f)); // melting out of the front
+            Part(s, Sphere, cheese, new(.02f, -.09f, -.28f), scale: new(.2f, .02f, .14f)); // and pooling on the plate
+            Part(s, Cylinder, stick, new(0, 0, -.44f), new(90, 0, 0), new(.03f, .14f, .03f));
         }
         return root;
     }

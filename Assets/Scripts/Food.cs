@@ -32,10 +32,10 @@ public static partial class Products
         2 => Cornet(),
         3 => Tiramisu(),
         4 => Pasta(),
-        5 => Bottle("OLIO", liquid: C("#5a6e1c"), label: C("#1f4a2a"), cap: C("#d9b44a"), fill: .95f),
-        6 => Cannolo(),
+        5 => OliveOil(),
+        6 => Mozzarella(),
         7 => Parmesan(),
-        8 => Jar("PESTO", content: C("#4f8a2a"), lid: C("#d9b44a"), label: C("#fbf3e4"), ink: C("#2f6b2a")),
+        8 => Pesto(),
         9 => Salami(),
         10 => Panettone(),
         _ => Espresso(),
@@ -53,8 +53,8 @@ public static partial class Products
         7 => Takoyaki(),
         8 => Tempura(),
         9 => Gyoza(),
-        10 => Ramune(),
-        _ => Edamame(),
+        10 => SoySauce(),
+        _ => Yakitori(),
     };
 
     static GameObject Usa(int id) => id switch
@@ -368,9 +368,19 @@ public static partial class Products
 
     static GameObject Tomate()
     {
+        // a round, glossy tomato: flat bottom, shoulders lobed, a hollow at the top where the star of sepals sits
         var root = new GameObject("Tomate");
-        Spin(root, Ball(.36f, .27f, .75f), Plain(C("#e2321e"), .65f), ribs: 6, ribAmp: .05f);
-        Calyx(root, .54f, 5, .2f);
+        Spin(root, P(0, 0, .15f, .01f, .28f, .06f, .36f, .16f, .39f, .27f, .37f, .38f, .3f, .46f, .18f, .51f, .08f, .5f, 0, .47f),
+            Paint((u, v) => Color.Lerp(C("#d8231a"), C("#f04a26"), Mathf.Clamp01((v - .45f) * 2)), .75f), ribs: 5, ribAmp: .05f, segments: 40);
+        var green = Plain(C("#3f8f2c"), .35f);
+        for (int i = 0; i < 5; i++) // pointed sepals curling down over the shoulders
+        {
+            float a = i * 72 + 10;
+            var dir = Quaternion.Euler(0, a, 0) * Vector3.right;
+            Part(root, Prim(PrimitiveType.Sphere), green, dir * .1f + Vector3.up * .485f, new(0, a, -22), new(.22f, .025f, .06f));
+        }
+        Part(root, Prim(PrimitiveType.Cylinder), green, new(0, .53f, 0), scale: new(.045f, .04f, .045f)); // short stem
+        Part(root, Prim(PrimitiveType.Cylinder), green, new(.02f, .58f, 0), new(0, 0, -35), scale: new(.035f, .03f, .035f));
         return root;
     }
 
@@ -547,8 +557,16 @@ public static partial class Products
         var root = new GameObject("Cornet");
         Spin(root, P(0, 0, .05f, .03f, .24f, .58f, .26f, .62f, 0, .62f), Paint((u, v) =>
             Mathf.Repeat(u * 10 + v * 6, 1) < .12f || Mathf.Repeat(u * 10 - v * 6, 1) < .12f ? C("#b57834") : C("#e2a85c"), .25f)); // waffle
-        Spin(root, Ball(.28f, .76f), Plain(C("#f7a8c4"), .35f));
-        Part(root, Prim(PrimitiveType.Sphere), Plain(C("#d7192a"), .7f), new(0, 1.06f, 0), scale: Vector3.one * .1f);
+        // Italian gelato: two smooth scoops, each with a wavy lip where it was pressed out of the spatula, pistachio
+        // under stracciatella (cream with fine chocolate flecks), a waffle wafer standing up out of the top
+        var pistachio = Plain(C("#b5d07a"), .3f);
+        var stracciatella = Paint((u, v) => Dot(u, v, 40, 22, .55f, .13f, 3, out _) ? C("#2a170c") : C("#fbf4e6"), .3f);
+        Spin(root, P(0, .6f, .3f, .6f, .32f, .66f, .27f, .72f, 0, .72f), pistachio, ribs: 10, ribAmp: .08f);
+        Spin(root, Ball(.28f, .74f, .85f), pistachio);
+        Spin(root, P(0, .88f, .25f, .88f, .27f, .93f, .22f, .98f, 0, .98f), stracciatella, ribs: 9, ribAmp: .08f);
+        Spin(root, Ball(.23f, .99f, .85f), stracciatella);
+        Part(root, Prim(PrimitiveType.Cube), Paint((u, v) => Mathf.Repeat(u * 5, 1) < .14f || Mathf.Repeat(v * 7, 1) < .14f
+            ? C("#c98d43") : C("#ecc27a"), .3f), new(.07f, 1.22f, -.03f), new(0, -35, -16), new(.2f, .3f, .035f)); // wafer
         return root;
     }
 
@@ -638,7 +656,7 @@ public static partial class Products
     static void Stem(GameObject root, float y, Color? color = null) =>
         Part(root, Prim(PrimitiveType.Cylinder), Plain(color ?? C("#6b4a1f"), .2f), new(0, y + .07f, 0), new(0, 0, 10), new(.035f, .08f, .035f));
 
-    // green leaves radiating on top of a tomato or a strawberry
+    // green leaves radiating on top of a strawberry
     static void Calyx(GameObject root, float y, int leaves, float length)
     {
         var green = Plain(C("#3e8f2e"), .3f);

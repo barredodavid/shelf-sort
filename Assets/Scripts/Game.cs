@@ -336,7 +336,7 @@ public partial class Game : MonoBehaviour
         if (mat) foreach (var r in rs) r.sharedMaterials = Enumerable.Repeat(mat, r.sharedMaterials.Length).ToArray();
         var b = rs[0].bounds;
         foreach (var r in rs) b.Encapsulate(r.bounds);
-        float k = Mathf.Min(1.04f / b.size.x, 1.45f / b.size.y, 1.04f / b.size.z);
+        float k = Mathf.Min(1.04f / b.size.x, 1.45f / b.size.y, 1.04f / b.size.z) * Products.Fill(model.name);
         model.transform.localScale *= k;
         // scaling is around the pivot (pos): move the scaled bounds' bottom-center onto pos
         var c = pos + (b.center - pos) * k;
