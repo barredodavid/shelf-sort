@@ -20,5 +20,13 @@ echo "Uploading $IPA to TestFlight"
 
 # altool looks for the key as AuthKey_<id>.p8 in ~/.appstoreconnect/private_keys
 mkdir -p ~/.appstoreconnect/private_keys
-printf '%s\n' "$ASC_KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
+# a one-line settings field loses the .p8's line breaks (or keeps them as "\n"): keep only the base64 body between
+# the BEGIN/END lines and rebuild the file, 64 characters a line
+BODY=$(printf '%s' "$ASC_KEY_P8" | sed 's/\\n/ /g; s/-----BEGIN PRIVATE KEY-----//; s/-----END PRIVATE KEY-----//' | tr -d ' \r\n\t')
+{
+  echo "-----BEGIN PRIVATE KEY-----"
+  printf '%s' "$BODY" | fold -w 64
+  echo
+  echo "-----END PRIVATE KEY-----"
+} > ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
 xcrun altool --upload-app --type ios --file "$IPA" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
