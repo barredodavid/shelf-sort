@@ -2,7 +2,7 @@ using System.Linq;
 using UnityEngine;
 
 // Trophies: long-run goals, each with three tiers (bronze, silver, gold) paying coins. Some count events (Count:
-// pigeons shooed, bentos opened...), some keep a best (Best: the longest combo), others read the progress already
+// pigeons shooed, padlocks opened...), some keep a best (Best: the longest combo), others read the progress already
 // saved (three-star levels, albums, countries done, the daily streak). Every change checks them all; a tier newly
 // reached pays and shows a banner. The trophy screen lists them with their progress.
 public partial class Game
@@ -18,7 +18,7 @@ public partial class Game
     {
         ("pigeons", "Chasseur de pigeons", "Chasse {0} pigeons", new[] { 10, 50, 200 }, () => Stat("pigeons")),
         ("siesta", "Juste à temps", "Fais {0} trios avant le rideau", new[] { 5, 25, 100 }, () => Stat("siesta")),
-        ("bento", "Maître du bento", "Ouvre {0} bentos", new[] { 10, 50, 200 }, () => Stat("bento")),
+        ("bento", "Serrurier", "Ouvre {0} cadenas", new[] { 10, 50, 200 }, () => Stat("bento")),
         ("promo", "Roi des promos", "Fais {0} trios en promo", new[] { 10, 50, 200 }, () => Stat("promo")),
         ("trios", "Trieur", "Fais {0} trios", new[] { 100, 1000, 10000 }, () => Stat("trios")),
         ("combo", "Combo", "Enchaîne un combo x{0}", new[] { 3, 5, 8 }, () => Stat("combo")),
@@ -109,7 +109,8 @@ public partial class Game
         float inset = r.width * .1f;
         GUI.DrawTexture(new Rect(r.x + inset, r.y + inset, r.width - 2 * inset, r.height - 2 * inset), circle);
         var tint = tier < 0 ? new Color(.55f, .57f, .62f, .7f) : Color.white;
-        var pic = new Rect(r.x + inset * .7f, r.y + inset * .7f, r.width - inset * 1.4f, r.height - inset * 1.4f);
+        float side = r.width * .58f; // the square that fits inside the pale disc (its diameter / sqrt 2): nothing pokes out
+        var pic = new Rect(r.center.x - side / 2, r.center.y - side / 2, side, side);
         string key = t >= 0 ? TrophyList[t].key : "";
         var icon = t >= 0 && trophyIcons.TryGetValue(key, out var ic) ? ic : null;
         GUI.color = tint;
@@ -117,16 +118,36 @@ public partial class Game
         else if (key == "combo") Label(pic, "x" + TrophyList[t].tiers[Mathf.Max(0, tier)], (int)(r.width * .34f), tier < 0 ? tint : Red, true);
         else if (key == "streak") // a little calendar page
         {
-            var page = new Rect(pic.x + pic.width * .2f, pic.y + pic.height * .2f, pic.width * .6f, pic.height * .6f);
+            var page = new Rect(pic.x + pic.width * .08f, pic.y + pic.height * .08f, pic.width * .84f, pic.height * .84f);
             Fill(page, Color.white * tint);
             Fill(new Rect(page.x, page.y, page.width, page.height * .28f), Red * tint);
-            Label(new Rect(page.x, page.y + page.height * .25f, page.width, page.height * .75f), TrophyList[t].tiers[Mathf.Max(0, tier)].ToString(), (int)(r.width * .26f), Ink * tint);
+            Label(new Rect(page.x, page.y + page.height * .25f, page.width, page.height * .75f), TrophyList[t].tiers[Mathf.Max(0, tier)].ToString(), (int)(r.width * .24f), Ink * tint);
         }
-        else // a star (the three-star trophy, and the tier medals)
+        else if (key == "siesta") // just in time: a stopwatch
+        {
+            timerIcon ??= Fx.Icon(2);
+            GUI.color = tier < 0 ? tint : Ink;
+            GUI.DrawTexture(pic, timerIcon);
+        }
+        else if (key == "stars") // three stars, the middle one big, each with a dark outline to stand out on any rim
+        {
+            void Star3(float cx, float cy, float d)
+            {
+                GUI.color = tier < 0 ? tint * .8f : new Color(.55f, .3f, .08f);
+                GUI.DrawTexture(new Rect(cx - d * .58f, cy - d * .55f, d * 1.16f, d * 1.16f), star);
+                GUI.color = tier < 0 ? tint : Gold;
+                GUI.DrawTexture(new Rect(cx - d / 2, cy - d / 2, d, d), star);
+            }
+            star ??= Fx.Star(128);
+            Star3(pic.center.x - pic.width * .34f, pic.center.y + pic.height * .1f, pic.width * .44f);
+            Star3(pic.center.x + pic.width * .34f, pic.center.y + pic.height * .1f, pic.width * .44f);
+            Star3(pic.center.x, pic.center.y - pic.height * .06f, pic.width * .62f);
+        }
+        else // a star (the tier medals)
         {
             star ??= Fx.Star(128);
-            GUI.color = tier < 0 ? tint : Gold;
-            GUI.DrawTexture(new Rect(pic.x + pic.width * .15f, pic.y + pic.height * .12f, pic.width * .7f, pic.height * .7f), star);
+            GUI.color = tier < 0 ? tint : Darker(c); // dark on the pale disc
+            GUI.DrawTexture(pic, star);
         }
         GUI.color = Color.white;
     }
@@ -145,6 +166,7 @@ public partial class Game
     // called by Update when the trophy screen or the banner needs them (not from OnGUI, which mustn't render cameras)
     static readonly System.Collections.Generic.Dictionary<string, RenderTexture> trophyIcons = new();
     Camera iconCam;
+    Texture2D timerIcon;
     void TrophyIcons()
     {
         if (menu != Menu.Trophies && Time.time - trophyAt > 3.2f) return;
@@ -158,8 +180,7 @@ public partial class Game
         GameObject model = key switch
         {
             "pigeons" => Products.Pigeon(),
-            "siesta" => Products.Shutter(1.6f, 1.2f),
-            "bento" => Products.BentoWrap(),
+            "bento" => Products.Padlock(),
             "promo" => Products.SaleTag(),
             "albums" => Products.Chest(true),
             "world" => Products.Globe(.8f),
@@ -168,27 +189,44 @@ public partial class Game
         };
         if (!model) return;
         model.transform.position = StageO + new Vector3(0, 50, 0);
-        if (key is "trios" or "golden") // three of the same product side by side (gilded for the gold digger)
-            for (int i = -1; i <= 1; i++)
-            {
-                var p = Item(0, model.transform.position + new Vector3(i * 1.05f, 0, i == 0 ? -.2f : 0), 1, false, "icon");
-                p.transform.SetParent(model.transform, true);
-                if (key == "golden")
-                    foreach (var r in p.GetComponentsInChildren<Renderer>()) r.sharedMaterials = r.sharedMaterials.Select(Goldify).ToArray();
-            }
-        if (key == "world") model.transform.rotation = Quaternion.Euler(-20, 160, 0);
-        if (key is "pigeons" or "albums") model.transform.rotation = Quaternion.Euler(0, 30, 0);
-        if (key == "siesta") // half down
+        var at = model.transform.position;
+        Transform Product(int id, Vector3 offset, float scale = 1, bool gold = false) // one of the country's products, in the picture
         {
-            model.transform.Find("curtain").localScale = new Vector3(1, .7f, 1);
-            model.transform.Find("bar").localPosition = new Vector3(0, -.7f, 0);
+            var p = Item(id, at + offset, scale, false, "icon");
+            p.transform.SetParent(model.transform, true);
+            if (gold) foreach (var r in p.GetComponentsInChildren<Renderer>()) r.sharedMaterials = r.sharedMaterials.Select(Goldify).ToArray();
+            return p.transform;
+        }
+        switch (key)
+        {
+            case "trios": // a trio of a tall product, the middle one in front
+            case "golden": // the same, gilded
+                int id = key == "trios" ? 4 : 1;
+                Product(id, new Vector3(-.8f, 0, .3f), .9f, key == "golden");
+                Product(id, new Vector3(.8f, 0, .3f), .9f, key == "golden");
+                Product(id, new Vector3(0, 0, -.2f), 1, key == "golden");
+                break;
+            case "bento": // a product tied up under its padlock
+                var tied = Product(2, new Vector3(0, 0, .05f));
+                Products.TieLock(model.transform, Mathf.Max(.4f, TopOf(tied) - at.y + .06f));
+                break;
+            case "promo": // the tag hanging over a product
+                var onSale = Product(3, new Vector3(-.25f, -1.2f, .45f));
+                onSale.position += Vector3.up * (at.y - .45f - TopOf(onSale)); // its top just under the tag
+                break;
+            case "world":
+                model.transform.rotation = Quaternion.Euler(-20, 160, 0);
+                break;
+            case "pigeons" or "albums":
+                model.transform.rotation = Quaternion.Euler(0, 30, 0);
+                break;
         }
         trophyIcons[key] = Snapshot(model);
     }
 
     // a picture of a model (already placed out of sight), framed on its bounds, seen a little from above, on a clear
-    // background; the model is destroyed
-    RenderTexture Snapshot(GameObject model, int size = 256)
+    // background (standing: its base on the picture's bottom edge, not centred); the model is destroyed
+    RenderTexture Snapshot(GameObject model, int size = 256, bool standing = false)
     {
         var rs = model.GetComponentsInChildren<Renderer>();
         var b = rs[0].bounds;
@@ -204,7 +242,8 @@ public partial class Game
         var tex = new RenderTexture(size, size, 24, RenderTextureFormat.ARGB32) { antiAliasing = 4 };
         iconCam.targetTexture = tex;
         iconCam.orthographicSize = Mathf.Max(b.extents.x, b.extents.y) * 1.1f;
-        iconCam.transform.SetPositionAndRotation(b.center + Quaternion.Euler(12, 0, 0) * new Vector3(0, 0, -10), Quaternion.Euler(12, 0, 0));
+        var aim = standing ? new Vector3(b.center.x, b.min.y + iconCam.orthographicSize * .97f, b.center.z) : b.center;
+        iconCam.transform.SetPositionAndRotation(aim + Quaternion.Euler(12, 0, 0) * new Vector3(0, 0, -10), Quaternion.Euler(12, 0, 0));
         iconCam.Render();
         model.SetActive(false);
         Destroy(model);

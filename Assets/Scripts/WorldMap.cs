@@ -106,7 +106,7 @@ public partial class Game
             {
                 var model = Products.Landmark(w);
                 model.transform.SetPositionAndRotation(StageO + new Vector3(40 * w, 80, 0), Quaternion.Euler(0, w == 1 ? 0 : 20, 0));
-                landmarkIcons[w] = Snapshot(model);
+                landmarkIcons[w] = Snapshot(model, 256, true);
             }
         if (camFlags == 0) (camFlags, camBg) = (cam.clearFlags, cam.backgroundColor); // restored when the globe closes
         cam.clearFlags = CameraClearFlags.SolidColor;
@@ -208,19 +208,19 @@ public partial class Game
                 var flag = new Rect(r.x + 26, r.y + 30, 96, 64);
                 Fill(new Rect(flag.x - 5, flag.y - 5, flag.width + 10, flag.height + 10), Color.white);
                 Flag(flag, w);
-                Label(new Rect(r.x + 140, r.y + 14, r.width - 290, 70), Worlds[w].name.ToUpper(), Worlds[w].name.Length > 7 ? 32 : 40, Color.white, true, TextAnchor.MiddleLeft);
+                Label(new Rect(r.x + 140, r.y + 14, r.width - 310, 70), Worlds[w].name.ToUpper(), Worlds[w].name.Length > 7 ? 30 : 40, Color.white, true, TextAnchor.MiddleLeft);
                 Star(new Rect(r.x + 140, r.y + 92, 40, 40), true);
                 Label(new Rect(r.x + 186, r.y + 84, r.width - 330, 56),
                     open ? $"{WorldStars(w)} / {LevelsPerWorld * 3}" : $"{Worlds[w].need} pour ouvrir", 28, Color.white, false, TextAnchor.MiddleLeft);
                 if (landmarkIcons[w])
                 {
                     GUI.color = open ? Color.white : new Color(.6f, .62f, .68f, .8f);
-                    GUI.DrawTexture(new Rect(r.xMax - 180, r.y - 55, 190, 190), landmarkIcons[w]);
+                    GUI.DrawTexture(new Rect(r.xMax - 175, r.yMax - 195, 175, 175), landmarkIcons[w]); // standing on the card's lower part, its top out over the edge
                     GUI.color = Color.white;
                 }
                 if (w == mapWorld)
                 {
-                    var here = new Rect(r.x + 10, r.y - 30, 130, 56); // top left: the monument has the right
+                    var here = new Rect(r.center.x - 75, r.y - 34, 130, 56); // over the top edge, between the flag and the monument
                     Panel(here, Cream);
                     Label(here, "ICI", 30, Ink);
                 }

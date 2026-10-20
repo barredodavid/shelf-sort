@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// The first level with an obstacle or a country's twist opens on a bubble per new thing: its name, a little live 3D
+// The level introducing an obstacle or a country's twist opens, every time, on a bubble per new thing: its name, a live 3D
 // scene showing it (rendered off to the side by a second camera into a texture), what to do and what it pays. The
-// level waits, clock stopped, until the last bubble is tapped away. Each is shown once per device.
+// level waits, clock stopped, until the last bubble is tapped away.
 public partial class Game
 {
     static readonly Vector3 StageO = new(3000, 0, 0); // where the bubble's scene is built, far from everything
@@ -14,7 +14,28 @@ public partial class Game
     RenderTexture stageTex;
     Transform stage;
 
-    // called at the end of StartLevel: queues a bubble for each new thing in this level
+    // the level (country * LevelsPerWorld + level) that introduces each thing: a country's twist on its 6th level, the
+    // obstacles on the first baked level holding them; found once by reading the levels through
+    static Dictionary<string, int> introLevels;
+    static int IntroLevel(string key)
+    {
+        if (introLevels == null)
+        {
+            introLevels = new() { ["pigeon"] = 5, ["riposo"] = LevelsPerWorld + 5, ["bento"] = 2 * LevelsPerWorld + 5, ["promo"] = 3 * LevelsPerWorld + 5 };
+            for (int g = 0; g < Worlds.Length * LevelsPerWorld; g++)
+            {
+                var lv = LevelGen.Make(g + 1, new System.Random(0));
+                var all = lv.Shelves.SelectMany(sh => sh).SelectMany(r => r).ToList();
+                if (lv.Shelves.Any(sh => sh.Count > 1)) introLevels.TryAdd("back", g);
+                if (all.Any(LevelGen.IsFrozen)) introLevels.TryAdd("ice", g);
+                if (all.Any(LevelGen.IsBoxed)) introLevels.TryAdd("box", g);
+                if (all.Contains(LevelGen.Crate)) introLevels.TryAdd("crate", g);
+            }
+        }
+        return introLevels.TryGetValue(key, out int at) ? at : -1;
+    }
+
+    // called at the end of StartLevel: queues a bubble for each thing this level introduces (every time it is played)
     void StartIntros()
     {
         intros.Clear();
@@ -26,15 +47,12 @@ public partial class Game
                      ("box", all.Any(LevelGen.IsBoxed), "CARTON MYSTÈRE", "Attrape-le pour découvrir le produit caché dedans."),
                      ("crate", all.Contains(LevelGen.Crate), "CAISSE", "Elle ne bouge pas. Fais un trio sur une étagère voisine pour la casser."),
                      ("pigeon", twist == 0, "LE PIGEON DE PARIS", $"Il se pose sur un produit. Touche-le vite pour le chasser (+{PigeonCoins} pièces), sinon il emporte le produit ailleurs !"),
-                     ("riposo", twist == 1, "LA SIESTE ITALIENNE", $"Quand un rideau de fer descend à moitié, l'étagère va fermer {SiestaTime:0} s. Fais vite un trio dessus (+{SiestaCoins} pièces) !"),
-                     ("bento", twist == 2, "LE BENTO SCELLÉ", $"Un produit noué dans un tissu ne se prend pas : il s'ouvre après {BentoMoves} coups joués ailleurs (+{BentoCoins} pièces)."),
-                     ("promo", twist == 3, "PROMO FLASH", $"Une étiquette -50 % se pose sur un produit : fais son trio avant qu'elle disparaisse (+{SaleCoins} pièces)."),
+                     ("riposo", twist == 1, "LA SIESTE ITALIENNE", $"Quand un rideau de fer descend à moitié, l'étagère va fermer {SiestaTime:0} s. Fais vite un trio dessus : +{SiestaSeconds} s au chrono !"),
+                     ("bento", twist == 2, "LE PRODUIT CADENASSÉ", $"Un produit sous cadenas ne se prend pas. Le cadenas s'ouvre après {BentoMoves} coups joués ailleurs : le chiffre dessus montre ceux qui restent."),
+                     ("promo", twist == 3, "PROMO FLASH", $"Une étiquette -50 % se pose sur un produit : fais son trio avant la fin pour +{SaleSeconds} s au chrono. Raté : -{SaleMissed} s !"),
                  })
-            if (has && PlayerPrefs.GetInt("bubble" + key, 0) == 0)
-            {
-                PlayerPrefs.SetInt("bubble" + key, 1);
+            if (has && !daily && world * LevelsPerWorld + lvl == IntroLevel(key))
                 intros.Add((key, title, text));
-            }
         introAt = Time.time;
         if (intros.Count > 0) BuildStage();
     }
@@ -98,14 +116,16 @@ public partial class Game
                 Add(Products.Shutter(3.35f, 1.9f), new Vector3(0, 2.01f, -.86f)).name = "shutter";
                 break;
             case "bento":
-                Put(product, 0);
-                Add(Products.BentoWrap(), new Vector3(0, .11f, -.05f));
+                var tied = Put(product, 0);
+                var wrapped = Add(Products.Padlock(), new Vector3(0, .11f, -.05f));
+                wrapped.name = "bento";
+                Products.TieLock(wrapped, Mathf.Max(.4f, TopOf(tied) - StageO.y - .11f + .06f));
                 Put(other, -1.1f);
                 Put(other, 1.1f);
                 break;
             case "promo":
-                Put(product, 0);
-                Add(Products.SaleTag(), new Vector3(.25f, 1.66f, -.45f)).name = "tag";
+                var onSale = Put(product, 0);
+                Add(Products.SaleTag(), new Vector3(.25f, TopOf(onSale) - StageO.y + .45f, -.45f)).name = "tag";
                 Put(other, -1.1f);
                 Put(other, 1.1f);
                 break;
@@ -143,10 +163,10 @@ public partial class Game
                     if (Mathf.Repeat(t, 3) > 2) Flap(c);
                     break;
                 case "shutter": // coming down to half, then all the way, then up again
-                    float p = Mathf.Repeat(t, 4), down = p < 1.5f ? .45f * Mathf.SmoothStep(0, 1, p / .6f) : p < 3 ? 1 : 1 - (p - 3);
-                    c.Find("curtain").localScale = new Vector3(1, 1.9f * Mathf.Max(.01f, down), 1);
-                    c.Find("bar").localPosition = new Vector3(0, -1.9f * down, 0);
-                    c.Find("bar/sign").localRotation = Quaternion.Euler(0, 0, 8 * Mathf.Sin(t * 3));
+                    float p = Mathf.Repeat(t, 4.5f), down = p < 1.5f ? .55f * Mathf.SmoothStep(0, 1, p / .6f) // half down (the warning)
+                        : p < 3.3f ? Mathf.Lerp(.55f, 1, Mathf.SmoothStep(0, 1, (p - 1.5f) / .45f)) // then shut
+                        : 1 - Mathf.SmoothStep(0, 1, (p - 3.3f) / .6f); // then up again
+                    PoseShutter(c, 1.9f, down, t);
                     break;
                 case "tag":
                     c.localRotation = Quaternion.Euler(0, 0, 10 * Mathf.Sin(t * 2.4f));
@@ -172,6 +192,27 @@ public partial class Game
         var pic = new Rect(card.x + 60, card.y + 180, card.width - 120, (card.width - 120) * 400 / 640);
         Panel(new Rect(pic.x - 10, pic.y - 10, pic.width + 20, pic.height + 20), Darker(Cream));
         if (stageTex) GUI.DrawTexture(pic, stageTex);
+        var tag = stage ? stage.Find("tag") : null;
+        if (tag) // the sale tag's price cut, as in the level
+        {
+            var v = stageCam.WorldToViewportPoint(tag.Find("card").position);
+            Label(new Rect(pic.x + v.x * pic.width - 80, pic.yMax - v.y * pic.height - 26, 160, 52), "-50%", 34, Red);
+        }
+        var bento = stage ? stage.Find("bento") : null;
+        if (bento) // the moves left written on its padlock, counting down as moves are played
+        {
+            var v = stageCam.WorldToViewportPoint(bento.Find("lock").TransformPoint(new Vector3(0, .01f, -.08f)));
+            var at = new Rect(pic.x + v.x * pic.width - 34, pic.yMax - v.y * pic.height - 26, 68, 52);
+            Label(at, (BentoMoves - (int)Mathf.Repeat((Time.time - introAt) / 1.2f, BentoMoves)).ToString(), 30, Ink);
+        }
+        var shutter = stage ? stage.Find("shutter") : null;
+        if (shutter && shutter.Find("bar/sign").localScale.x > .7f) // the shutter's sign, written on as in the level
+        {
+            var v = stageCam.WorldToViewportPoint(shutter.Find("bar/sign").TransformPoint(new Vector3(0, -.5f, -.03f)));
+            var at = new Vector2(pic.x + v.x * pic.width, pic.yMax - v.y * pic.height);
+            Label(new Rect(at.x - 150, at.y - 34, 300, 36), "TORNO SUBITO", 28, Ink);
+            Label(new Rect(at.x - 150, at.y + 2, 300, 34), "4 s", 28, Red);
+        }
         Label(new Rect(card.x + 60, pic.yMax + 30, card.width - 120, card.yMax - pic.yMax - 60), body, 40, Ink);
         GUI.matrix = keep;
         Label(new Rect(0, card.yMax + 50, W, 70), intros.Count > 1 ? "Touche pour continuer" : "Touche pour jouer", 44,

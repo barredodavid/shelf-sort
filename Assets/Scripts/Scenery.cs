@@ -411,30 +411,42 @@ public static partial class Products
         return root;
     }
 
-    // a sealed bento: the product (still in sight) stands in a red lacquer tray with a gold cherry blossom on its front,
-    // tied up in an indigo furoshiki: a band down its front, one across, one over the top, the knot on top. The cloth
-    // is the child "wrap" (it flies off when the bento opens).
-    public static GameObject BentoWrap()
+    // a locked product: it stays in sight, a classic padlock hanging on it: a brass block (brushed, lighter at the top,
+    // its edges a shade darker, an engraved oval where the board writes the moves left), a tall chrome U shackle. The
+    // padlock is the child "lock", its shackle "shackle" (placed by TieLock; it springs open and drops off at the end).
+    public static GameObject Padlock()
     {
-        var root = new GameObject("BentoWrap");
-        var lacquer = Plain(C("#b3201e"), .85f);
-        var black = Plain(C("#1c1c20"), .85f);
-        var gold = Plain(C("#e8c64a"), .8f);
-        Part(root, Cube, lacquer, new(0, .14f, -.43f), scale: new(1.04f, .28f, .04f)); // the tray's front, sides and back
-        Part(root, Cube, lacquer, new(0, .14f, .43f), scale: new(1.04f, .28f, .04f));
-        foreach (int s in new[] { -1, 1 }) Part(root, Cube, lacquer, new(s * .5f, .14f, 0), scale: new(.04f, .28f, .9f));
-        Part(root, Cube, black, new(0, .29f, -.43f), scale: new(1.06f, .03f, .06f)); // its black rim
-        for (int p = 0; p < 5; p++)
-            Part(root, Sphere, gold, new(.055f * Mathf.Cos(p * 1.257f), .14f + .055f * Mathf.Sin(p * 1.257f), -.455f), scale: new(.07f, .07f, .01f));
-        var wrap = new GameObject("wrap");
-        wrap.transform.SetParent(root.transform, false);
-        var cloth = Paint((u, v) => Dot(u, v, 10, 6, .5f, .22f, 0, out _) ? C("#f4ecdc") : C("#2f3f86"), .3f); // indigo with white dots
-        Part(wrap, Cube, cloth, new(0, .8f, -.5f), scale: new(.2f, 1.4f, .02f)); // down the front
-        Part(wrap, Cube, cloth, new(0, .75f, -.51f), scale: new(1.08f, .2f, .02f)); // across it
-        Part(wrap, Cube, cloth, new(0, 1.5f, 0), scale: new(.2f, .02f, 1f)); // over the top
-        Part(wrap, Sphere, cloth, new(0, 1.55f, -.35f), scale: new(.3f, .24f, .26f)); // the knot
-        foreach (int s in new[] { -1, 1 }) Part(wrap, Sphere, cloth, new(s * .25f, 1.66f, -.35f), new(0, 0, s * -40), new(.38f, .15f, .2f)); // its ears
+        var root = new GameObject("Padlock");
+        var lockT = new GameObject("lock").transform;
+        lockT.SetParent(root.transform, false);
+        var brass = Paint((u, v) => Color.Lerp(C("#b8892e"), C("#ecc762"), v) * (.97f + .03f * Mathf.Sin(u * 90)), .75f); // brushed
+        var edge = Plain(C("#a87a26"), .7f);
+        Part(lockT.gameObject, Cube, brass, new(0, 0, 0), scale: new(.42f, .36f, .14f));
+        foreach (int s in new[] { -1, 1 }) Part(lockT.gameObject, Cube, edge, new(s * .2f, 0, 0), scale: new(.03f, .36f, .145f)); // its sides
+        Part(lockT.gameObject, Cube, edge, new(0, .17f, 0), scale: new(.42f, .025f, .145f)); // its top edge
+        Part(lockT.gameObject, Cylinder, edge, new(0, .01f, -.071f), new(90, 0, 0), new(.3f, .003f, .2f)); // the engraved oval
+        Part(lockT.gameObject, Cylinder, brass, new(0, .01f, -.072f), new(90, 0, 0), new(.27f, .003f, .17f));
+        var shackle = new GameObject("shackle").transform; // a U of chrome bar: two legs and the arch over them
+        shackle.SetParent(lockT, false);
+        var chrome = Plain(C("#e3e7ec"), .97f);
+        const float R = .13f, bar = .055f, legs = .2f;
+        foreach (int s in new[] { -1, 1 })
+            Part(shackle.gameObject, Cylinder, chrome, new(s * R, .18f + legs / 2, 0), scale: new(bar, legs / 2, bar));
+        for (int k = 0; k < 9; k++) // the arch, in short pieces along a half circle
+        {
+            float a = Mathf.PI * (k + .5f) / 9;
+            Part(shackle.gameObject, Cylinder, chrome, new(R * Mathf.Cos(a), .18f + legs + R * Mathf.Sin(a), 0), new(0, 0, a * Mathf.Rad2Deg),
+                new(bar, Mathf.PI * R / 9 * .6f, bar));
+        }
         return root;
+    }
+
+    // hangs a Padlock on a product `height` tall: on its front right corner, low, so the product itself stays in sight
+    public static void TieLock(Transform padlock, float height)
+    {
+        var lockT = padlock.Find("lock");
+        lockT.localPosition = new Vector3(.3f, Mathf.Clamp(height * .3f, .2f, .5f), -.6f);
+        lockT.localScale = Vector3.one * .78f;
     }
 
     // a sale tag hanging from a little hook: bright yellow card with a red border and a punched hole, on a string (the
@@ -460,7 +472,13 @@ public static partial class Products
         var wood = Paint((u, v) => Tone(Mathf.Repeat(v * 3, 1) < .08f ? "#5a3418" : "#9a5a2a"), .3f);
         var gold = Plain(Tone("#f2c230"), .8f);
         Part(root, Cube, wood, new(0, .25f, 0), scale: new(.8f, .5f, .55f)); // the box
-        Part(root, Sphere, gold, new(0, .48f, 0), scale: new(.66f, .14f, .44f)); // the coins heaped inside, seen once open
+        for (int k = 0; k < 16; k++) // the treasure inside, seen once open: a mound of gold coins and three gems
+        {
+            float a = k * 2.4f, d = .08f + .2f * Mathf.Repeat(k * .37f, 1);
+            Part(root, Cylinder, gold, new(Mathf.Cos(a) * d * 1.3f, .47f + .1f * (1 - d / .28f), Mathf.Sin(a) * d * .9f), new(25 * Mathf.Sin(k), k * 40, 20 * Mathf.Cos(k)), new(.14f, .012f, .14f));
+        }
+        foreach (var (hex, x, z) in new[] { ("#e8233a", -.16f, -.06f), ("#2f7de8", .12f, .05f), ("#2fc46a", .02f, -.12f) })
+            Part(root, Sphere, Plain(C(hex), .95f), new(x, .55f, z), scale: Vector3.one * .09f);
         var lid = new GameObject("lid"); // hinged at the back edge, so it swings open (Chest.cs)
         lid.transform.SetParent(root.transform, false);
         lid.transform.localPosition = new Vector3(0, .5f, .275f);

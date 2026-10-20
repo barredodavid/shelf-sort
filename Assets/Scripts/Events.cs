@@ -10,13 +10,14 @@ using UnityEngine;
 //    coins and a second); left there too long, it flies off with the product and drops it on another shelf;
 //    Italy, the siesta: a shelf's steel shutter comes half down as a warning (a trio made there then pays), then shuts
 //    it for a few seconds (nothing taken from it or put on it);
-//    Japan, sealed bentos: one or two products stand tied up in a bento cloth, untied after 3 moves (coins when they
-//    open);
+//    Japan, locked products: one or two products stand tied up under a padlock that opens after 3 moves (seconds when
+//    it opens);
 //    USA, the flash sale: one product wears a blinking SALE tag for a few seconds, and its trio pays a bonus.
 public partial class Game
 {
-    const float PigeonTime = 4, PigeonFlight = 1.1f, SiestaTime = 4, SaleTime = 8;
-    const int SaleCoins = 10, BentoMoves = 3, PigeonCoins = 3, BentoCoins = 5, SiestaCoins = 5;
+    const float PigeonTime = 4, PigeonFlight = 1.1f, SiestaTime = 4, SaleTime = 10;
+    const int BentoMoves = 3, PigeonCoins = 3, BentoSeconds = 2;
+    const int SaleSeconds = 5, SaleMissed = 5, SiestaSeconds = 3; // the sale and the siesta play on the clock: won or lost seconds
     const float SiestaWarning = 1.6f;
 
     int twist = -1; // the country whose twist runs in this level (-1: none)
@@ -106,10 +107,16 @@ public partial class Game
                 }
                 break;
             case 3: // flash sale on one product still on the board
-                if (saleId >= 0 && t > saleUntil)
+                if (saleId >= 0 && t > saleUntil) // missed: the shoppers rush in, and the clock pays
                 {
+                    var from = tags3D.Values.FirstOrDefault(tag => tag)?.position ?? new Vector3(0, boardY, 0);
                     saleId = -1;
                     nextSale = t + 12;
+                    time = Mathf.Max(0, time - SaleMissed);
+                    Toast($"PROMO RATÉE ! -{SaleMissed} s");
+                    Fx.Play("back", .7f);
+                    Fx.Haptic(2);
+                    Fly(from, clockTarget, $"-{SaleMissed} s");
                 }
                 else if (saleId < 0 && t > nextSale)
                 {
@@ -134,8 +141,8 @@ public partial class Game
     void PlaceShutter()
     {
         int s = shutS >= 0 ? shutS : shutWarn >= 0 ? shutWarn : shutUp;
-        float t = Time.time, down = shutS >= 0 ? Mathf.Lerp(.45f, 1, Mathf.Clamp01((t - shutFrom) / .2f))
-            : shutWarn >= 0 ? .45f * Mathf.SmoothStep(0, 1, (t - shutFrom + SiestaWarning) / .5f)
+        float t = Time.time, down = shutS >= 0 ? Mathf.Lerp(.55f, 1, Mathf.SmoothStep(0, 1, (t - shutFrom) / .45f))
+            : shutWarn >= 0 ? .55f * Mathf.SmoothStep(0, 1, (t - shutFrom + SiestaWarning) / .5f)
             : 1 - Mathf.Clamp01((t - shutUpAt) / .5f);
         if (s < 0 || down <= 0)
         {
@@ -150,13 +157,24 @@ public partial class Game
             shutter3D.SetParent(root);
         }
         shutter3D.position = ShelfPos(s) + new Vector3(0, .11f + height, -.86f);
-        shutter3D.Find("curtain").localScale = new Vector3(1, height * down, 1);
-        var bar = shutter3D.Find("bar");
-        bar.localPosition = new Vector3(0, -height * down, 0);
-        bar.Find("sign").localRotation = Quaternion.Euler(0, 0, 8 * Mathf.Sin(t * 3)); // swinging
+        PoseShutter(shutter3D, height, down, t);
     }
 
-    // each sealed product stands tied up in its bento cloth, the knot tugging a little more as the moves run out
+    // a shutter `height` tall, `down` (0..1) of the way down: the curtain and its bar; the sign, hung on the curtain just
+    // above the bar, only shows once there is curtain enough to carry it (growing in as it comes), swinging
+    static void PoseShutter(Transform shutter, float height, float down, float t)
+    {
+        shutter.Find("curtain").localScale = new Vector3(1, Mathf.Max(.01f, height * down), 1);
+        var bar = shutter.Find("bar");
+        bar.localPosition = new Vector3(0, -height * down, 0);
+        var sign = bar.Find("sign");
+        float room = Mathf.Clamp01((height * down - .85f) / .25f); // the sign is .85 tall from its strings to its bottom
+        sign.localScale = Vector3.one * Mathf.Max(.001f, room);
+        sign.localPosition = new Vector3(0, .84f * room, -.14f);
+        sign.localRotation = Quaternion.Euler(0, 0, 8 * Mathf.Sin(t * 3));
+    }
+
+    // a padlock hanging before each locked product, rattling a little more as the moves run out
     void PlaceBentos()
     {
         foreach (var c in bentos3D.Keys.Where(c => !seals.ContainsKey(c)).ToList()) // opened, or popped with a trio
@@ -168,23 +186,28 @@ public partial class Game
         {
             if (!bentos3D.TryGetValue(c, out var box) || !box)
             {
-                bentos3D[c] = box = Products.BentoWrap().transform;
+                bentos3D[c] = box = Products.Padlock().transform;
                 box.SetParent(root);
                 box.SetPositionAndRotation(SlotPos(c.s, c.i) + new Vector3(0, 0, -.05f), Quaternion.identity);
             }
-            box.Find("wrap").localScale = new Vector3(1, 1, 1 + .03f * (BentoMoves - n) * Mathf.Sin(Time.time * 8)); // straining
+            float tall = views.TryGetValue(c, out var v) ? Mathf.Max(.4f, TopOf(v.transform) - SlotPos(c.s, c.i).y + .06f) : 1.2f;
+            Products.TieLock(box, tall); // hung at the product's middle
+            box.Find("lock").localRotation = Quaternion.Euler(0, 0, 4 * (BentoMoves - n) * Mathf.Sin(Time.time * 9)); // rattling
         }
     }
 
-    // opened: the cloth flies up spinning and the tray shrinks away
+    // the top of a model, in world space
+    static float TopOf(Transform t) => t.GetComponentsInChildren<Renderer>().Max(r => r.bounds.max.y);
+
+    // opened: the shackle springs up, then the padlock drops off, spinning
     IEnumerator OpenBento(Transform box)
     {
-        var wrap = box.Find("wrap");
-        for (float t = 0; t < .45f && box; t += Time.deltaTime)
+        var lockT = box.Find("lock");
+        for (float t = 0; t < .6f && box; t += Time.deltaTime)
         {
-            wrap.localPosition += Vector3.up * 4 * Time.deltaTime;
-            wrap.localRotation = Quaternion.Euler(0, 600 * t, 0);
-            box.localScale = Vector3.one * (1 - t / .45f);
+            lockT.Find("shackle").localPosition = new Vector3(0, Mathf.Min(t, .1f), 0); // the shackle springs open
+            if (t > .12f) lockT.localPosition += new Vector3(0, -4 * t, -1.5f) * Time.deltaTime; // then it drops off, spinning
+            if (t > .12f) lockT.localRotation = Quaternion.Euler(0, 0, 500 * (t - .12f));
             yield return null;
         }
         if (box) Destroy(box.gameObject);
@@ -208,7 +231,8 @@ public partial class Game
                 tags3D[c] = tag = Products.SaleTag().transform;
                 tag.SetParent(root);
             }
-            tag.SetPositionAndRotation(SlotPos(c.s, c.i) + new Vector3(.25f, 1.55f, -.45f), Quaternion.Euler(0, 0, 10 * Mathf.Sin(Time.time * 2.4f + c.i)));
+            float top = views.TryGetValue(c, out var v) ? TopOf(v.transform) : SlotPos(c.s, c.i).y + 1.2f; // hung just over the product
+            tag.SetPositionAndRotation(new Vector3(SlotPos(c.s, c.i).x + .25f, top + .45f, SlotPos(c.s, c.i).z - .45f), Quaternion.Euler(0, 0, 10 * Mathf.Sin(Time.time * 2.4f + c.i)));
             tag.Find("card").GetComponent<Renderer>().sharedMaterial.SetColor("_EmissionColor", new Color(1, .8f, .1f) * blink);
         }
     }
@@ -351,7 +375,7 @@ public partial class Game
             ShooPigeon(true);
             return true;
         }
-        string why = s == shutS ? "Fermé pour la sieste !" : seals.TryGetValue((s, i), out int n) ? $"Bento scellé : encore {n} coup{(n > 1 ? "s" : "")}" : null;
+        string why = s == shutS ? "Fermé pour la sieste !" : seals.TryGetValue((s, i), out int n) ? $"Cadenassé : encore {n} coup{(n > 1 ? "s" : "")}" : null;
         if (why == null) return false;
         Toast(why);
         Fx.Play("back");
@@ -368,7 +392,7 @@ public partial class Game
             seals.Remove(c);
             Fx.Burst(SlotAim(c.s, c.i) + new Vector3(0, 0, -1), 15);
             Fx.Play("match", 1.6f);
-            Reward(c.s, BentoCoins, 1, $"BENTO OUVERT ! +{BentoCoins}");
+            Reward(c.s, 0, BentoSeconds, $"CADENAS OUVERT ! +{BentoSeconds} s");
             Count("bento");
         }
     }
@@ -379,14 +403,14 @@ public partial class Game
         seals.Keys.Where(c => c.s == s).ToList().ForEach(c => seals.Remove(c));
         if (s == shutWarn) // emptied a trio there before the shutter fell
         {
-            Reward(s, SiestaCoins, 2, "JUSTE À TEMPS !");
+            Reward(s, 0, SiestaSeconds, $"JUSTE À TEMPS ! +{SiestaSeconds} s");
             Count("siesta");
         }
         if (id == saleId)
         {
             saleId = -1;
             nextSale = Time.time + 12;
-            Reward(s, SaleCoins, 3, "PROMO ! x2");
+            Reward(s, 0, SaleSeconds, $"PROMO ! +{SaleSeconds} s");
             Fx.Play("till");
             Count("promo");
         }
@@ -400,7 +424,7 @@ public partial class Game
         time = Mathf.Min(total, time + seconds);
         Toast(praise);
         Fx.Haptic(3);
-        for (int c = 0; c < 4; c++) Fly(ShelfPos(s) + new Vector3((c - 1.5f) * .3f, .7f, 0), coinTarget, null, .1f + c * .06f);
+        if (coinsWon > 0) for (int c = 0; c < 4; c++) Fly(ShelfPos(s) + new Vector3((c - 1.5f) * .3f, .7f, 0), coinTarget, null, .1f + c * .06f);
         Fly(ShelfPos(s) + new Vector3(0, 1f, 0), clockTarget, $"+{seconds} s", .2f);
     }
 
@@ -408,23 +432,21 @@ public partial class Game
 
     void DrawEvents(float k)
     {
-        // the words on the twists' 3D models: the sale tags' price cut, the tiers left on each bento, the shutter's board
+        // the words on the twists' 3D models: the sale tags' price cut, the moves left on each padlock, the shutter's board
         foreach (var tag in tags3D.Values)
             if (tag)
             {
                 var p = ToGui(tag.Find("card").position);
-                Label(new Rect(p.x - 80, p.y - 30, 160, 60), "-50%", 34, Red);
+                Label(new Rect(p.x - 80, p.y - 38, 160, 50), "-50%", 34, Red);
+                Label(new Rect(p.x - 80, p.y + 2, 160, 36), $"{Mathf.CeilToInt(saleUntil - Time.time)} s", 26, Ink); // the time left to make its trio
             }
         foreach (var (c, n) in seals)
             if (bentos3D.TryGetValue(c, out var box) && box)
             {
-                var p = ToGui(box.TransformPoint(new Vector3(.45f, 1.5f, -.5f))); // a badge by the knot: the moves left
-                GUI.color = Ink;
-                GUI.DrawTexture(new Rect(p.x - 38, p.y - 38, 76, 76), circle);
-                GUI.color = Color.white;
-                Label(new Rect(p.x - 38, p.y - 38, 76, 76), n.ToString(), 46, Color.white);
+                var p = ToGui(box.Find("lock").TransformPoint(new Vector3(0, .01f, -.08f))); // the moves left, written on the padlock
+                Label(new Rect(p.x - 40, p.y - 26, 80, 52), n.ToString(), 38, Ink);
             }
-        if (shutter3D)
+        if (shutter3D && shutter3D.Find("bar/sign").localScale.x > .7f) // its words, once the sign has room to show
         {
             var sign = shutter3D.Find("bar/sign");
             var p = ToGui(sign.TransformPoint(new Vector3(0, -.5f, -.03f)));
