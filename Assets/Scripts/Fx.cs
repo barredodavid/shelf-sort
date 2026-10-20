@@ -22,11 +22,27 @@ public static class Fx
         confettiMat = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultParticleMaterial;
     }
 
+    // every sound comes with its tap under the finger: light for picks, drops and buttons, medium for a trio, heavy
+    // for a high combo, a success buzz for a win, an error buzz for a loss
     public static void Play(string name, float pitch = 1)
     {
         src.pitch = pitch;
         src.PlayOneShot(clips[name]);
+        Haptic(name switch
+        {
+            "match" => pitch >= 1.24f ? 2 : 1, // combo x3 and up (Game.Resolve raises the pitch per step)
+            "win" => 3,
+            "lose" => 4,
+            _ => 0,
+        });
     }
+
+#if UNITY_IOS && !UNITY_EDITOR
+    [System.Runtime.InteropServices.DllImport("__Internal")] static extern void _ShelfHaptic(int kind);
+    public static void Haptic(int kind) => _ShelfHaptic(kind);
+#else
+    public static void Haptic(int kind) { } // ponytail: iOS only; Android would need a plugin for anything finer than Handheld.Vibrate
+#endif
 
     static AudioClip Arp(float[] notes, float step, float vol) =>
         Make(step * notes.Length + .15f, (t, p) => notes[Mathf.Min((int)(t / step), notes.Length - 1)], vol, step, notes.Length);
@@ -201,7 +217,8 @@ public static class Fx
     }
 
     // White rounded square; used as a 9-sliced IMGUI background, tinted with GUI.backgroundColor
-    // Icons, white on transparent: 0 undo arrow, 1 shuffle arrows, 2 stopwatch, 3 plane, 4 speaker, 5 speaker muted. Round pen strokes
+    // Icons, white on transparent: 0 undo arrow, 1 shuffle arrows, 2 stopwatch, 3 plane, 4 speaker, 5 speaker muted, 6 restart,
+    // 7 pause. Round pen strokes
     // (distance to segments, like StrokeFont) plus triangular arrowheads, in a 0..1 box with y up.
     public static Texture2D Icon(int kind, int size = 128)
     {
@@ -244,6 +261,16 @@ public static class Fx
                 heads.Add(new Vector2[] { new(.5f, .66f), new(.94f, .4f), new(.5f, .5f) });
                 heads.Add(new Vector2[] { new(.5f, .24f), new(.3f, .1f), new(.5f, .16f) });
                 heads.Add(new Vector2[] { new(.5f, .24f), new(.7f, .1f), new(.5f, .16f) });
+                break;
+            case 6: // ↺ restart: a ring three quarters round, its arrowhead at the end, top right
+                Arc(new(.5f, .48f), .3f, 110, 400);
+                Head(new(.63f, .79f), new Vector2(-.64f, .77f));
+                break;
+            case 7: // ❚❚ pause
+                heads.Add(new Vector2[] { new(.28f, .2f), new(.42f, .2f), new(.42f, .8f) });
+                heads.Add(new Vector2[] { new(.28f, .2f), new(.42f, .8f), new(.28f, .8f) });
+                heads.Add(new Vector2[] { new(.58f, .2f), new(.72f, .2f), new(.72f, .8f) });
+                heads.Add(new Vector2[] { new(.58f, .2f), new(.72f, .8f), new(.58f, .8f) });
                 break;
             case 4: // speaker with sound waves
             case 5: // speaker, crossed out

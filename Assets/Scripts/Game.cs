@@ -142,7 +142,7 @@ public partial class Game : MonoBehaviour
     {
         StopAllCoroutines();
         cam.transform.position = CamHome;
-        var lv = LevelGen.Make(world * LevelsPerWorld + lvl + 1, rng);
+        var lv = daily ? DailyLevel() : LevelGen.Make(world * LevelsPerWorld + lvl + 1, rng);
         shelves = lv.Shelves;
         time = total = baseTime = lv.Time;
         hard = lv.Hard;
@@ -153,12 +153,18 @@ public partial class Game : MonoBehaviour
         dragS = -1;
         busy = over = adUsed = won = usedBonus = started = false;
         history.Clear();
-        undoLeft = shuffleLeft = timeLeft = 1;
+        undoLeft = shuffleLeft = timeLeft = daily && DailyTwist == 2 ? 0 : 1; // the "no bonus" challenge
         combo = 0;
         lastMatch = -10;
+        // now and then one product of the level is golden: its trio pays coins (never on the very first level)
+        var ids = shelves.SelectMany(sh => sh).SelectMany(r => r).Where(LevelGen.IsProduct).Select(LevelGen.Id).Distinct().ToList();
+        goldenId = daily ? (DailyTwist == 3 ? AllGolden : -1) : world + lvl > 0 && rng.NextDouble() < GoldenChance ? ids[rng.Next(ids.Count)] : -1;
         Render();
+        StartEvents();
 
-        if (hard) Toast("NIVEAU DIFFICILE !");
+        if (daily) Toast(DailyTwists[DailyTwist]);
+        else if (hard) Toast("NIVEAU DIFFICILE !");
+        else if (goldenId >= 0) Toast("PRODUIT DORÉ !");
         // the first level with each obstacle explains it once
         tipUntil = 0;
         var all = shelves.SelectMany(sh => sh).SelectMany(r => r).ToList();
@@ -168,6 +174,11 @@ public partial class Game : MonoBehaviour
                      ("ice",all.Any(LevelGen.IsFrozen), "Produit gelé : pose 2 produits pareils à côté pour le libérer"),
                      ("box", all.Any(LevelGen.IsBoxed), "Carton mystère : attrape-le pour voir ce qu'il cache"),
                      ("crate", all.Contains(LevelGen.Crate), "Caisse : fais un trio sur une étagère voisine pour la casser"),
+                     ("pigeon", twist == 0, "Pigeon : touche-le pour le chasser du produit sur lequel il s'est posé"),
+                     ("riposo", twist == 1, "Sieste : une étagère ferme quelques secondes, attends qu'elle rouvre"),
+                     ("bento", twist == 2, "Bento scellé : il s'ouvre au bout de 3 coups"),
+                     ("promo", twist == 3, "Promo flash : fais vite le trio du produit à -50 % pour un bonus"),
+                     ("client", customers, "Client pressé : fais le trio des produits entourés avant la fin du temps"),
                  })
             if (has && PlayerPrefs.GetInt("tip" + key, 0) == 0)
             {
@@ -300,11 +311,59 @@ public partial class Game : MonoBehaviour
             : LevelGen.IsBoxed(id) ? mysteryModel ??= Hidden(Products.Mystery())
             : Model(LevelGen.Id(id)));
         model.SetActive(true); // procedural templates are kept inactive
+        if (LevelGen.IsProduct(id) && !LevelGen.IsBoxed(id) && Golden(id))
+            foreach (var r in model.GetComponentsInChildren<Renderer>())
+                r.sharedMaterials = r.sharedMaterials.Select(Goldify).ToArray();
         // the waiting row keeps its real colors, only darker: in the shade at the back, yet still recognizable
         if (ghost)
             foreach (var r in model.GetComponentsInChildren<Renderer>())
                 r.sharedMaterials = r.sharedMaterials.Select(Dim).ToArray();
         return Wrap(model, pos, scale, name, null);
+    }
+
+    // ---------- the golden product: one product of some levels, gilded; each of its trios pays GoldenCoins ----------
+
+    const float GoldenChance = .35f;
+    const int GoldenCoins = 15;
+    int goldenId = -1; // AllGolden: every product (a daily challenge)
+    bool Golden(int x) => goldenId == AllGolden || LevelGen.Id(x) == goldenId;
+    int GoldPay => goldenId == AllGolden ? 5 : GoldenCoins; // when all are golden, each trio pays less
+    readonly Dictionary<Material, Material> gilded = new();
+
+    Material Goldify(Material m)
+    {
+        if (!gilded.TryGetValue(m, out var g))
+        {
+            gilded[m] = g = new Material(m) { color = Color.Lerp(m.color, new Color(1f, .8f, .25f), .55f) };
+            g.EnableKeyword("_EMISSION");
+            g.SetColor("_EmissionColor", new Color(1f, .7f, .15f) * .35f);
+            g.SetFloat("_Smoothness", .9f);
+        }
+        return g;
+    }
+
+    // ---------- flyers: little things flying across the HUD (coins to the purse, "+2 s" to the clock) ----------
+
+    readonly List<(Vector2 from, Vector2 to, float at, string text)> flyers = new();
+    Vector2 coinTarget, clockTarget; // where they land, set by the HUD as it lays out
+
+    void Fly(Vector3 worldFrom, Vector2 to, string text, float delay = 0) => flyers.Add((ToGui(worldFrom), to, Time.time + delay, text));
+
+    void DrawFlyers()
+    {
+        flyers.RemoveAll(f => Time.time > f.at + .6f);
+        foreach (var (from, to, at, text) in flyers)
+        {
+            float t = (Time.time - at) / .6f;
+            if (t < 0) continue;
+            var p = Vector2.Lerp(from, to, t * t) + Vector2.down * 160 * Mathf.Sin(Mathf.PI * t); // speeding up, on an arc
+            if (text == null) // a coin
+            {
+                Panel(new Rect(p.x - 30, p.y - 30, 60, 60), Darker(Gold));
+                Panel(new Rect(p.x - 26, p.y - 30, 52, 52), Gold);
+            }
+            else Label(new Rect(p.x - 120, p.y - 40, 240, 80), text, 52, Color.white, true);
+        }
     }
 
     readonly Dictionary<Material, Material> dimmed = new();
@@ -400,6 +459,7 @@ public partial class Game : MonoBehaviour
         UpdateMap();
         UpdateWorld();
         TickStars();
+        if (started && !over && !Paused) UpdateEvents();
         if (started && !busy && !over && !Paused)
         {
             time = Mathf.Max(0, time - Time.deltaTime);
@@ -420,7 +480,7 @@ public partial class Game : MonoBehaviour
                 StartCoroutine(Fx.Squash(views[(s, i)].transform));
                 Toast(x == LevelGen.Crate ? "Fais un trio à côté !" : "Glacé !");
             }
-            else if (s >= 0)
+            else if (s >= 0 && !HeldBack(s, i)) // a pigeon, a siesta or a sealed bento may hold it back
             {
                 if (LevelGen.IsBoxed(x)) // the carton opens in the hand: swap its view for the product inside
                 {
@@ -481,7 +541,7 @@ public partial class Game : MonoBehaviour
         for (int s = 0; s < shelves.Count; s++)
             for (int i = 0; i < 3; i++)
             {
-                if (shelves[s][0][i] >= 0 || locked.Contains(s)) continue;
+                if (shelves[s][0][i] >= 0 || locked.Contains(s) || s == shutS) continue; // nothing goes on a shelf shut for the siesta
                 float d = Vector2.Distance(p, SlotAim(s, i));
                 if (d < bestD) { bestD = d; best = (s, i); }
             }
@@ -498,6 +558,7 @@ public partial class Game : MonoBehaviour
         shelves[b][0][j] = shelves[a][0][i];
         shelves[a][0][i] = -1;
         moves++;
+        TickSeals();
         // the dropped product settles into its slot right away, even while another shelf is still animating
         views.Remove((a, i));
         views[(b, j)] = view.gameObject;
@@ -544,19 +605,39 @@ public partial class Game : MonoBehaviour
             combo = Time.time - lastMatch < 4 ? combo + 1 : 1;
             lastMatch = Time.time;
             Fx.Play("match", 1 + .12f * (combo - 1)); // each combo step sings a bit higher
-            if (combo > 1)
+            if (combo > 1) // praise growing with the chain, and the 2 seconds won flying to the clock
             {
                 time = Mathf.Min(total, time + 2);
-                Toast($"COMBO x{combo}  +2 s");
+                Toast(combo == 2 ? "SUPER ! x2" : combo == 3 ? "GÉNIAL ! x3" : $"INCROYABLE ! x{combo}");
                 StartCoroutine(Fx.Shake(cam.transform, CamHome, .08f + .04f * combo));
+                Fly(ShelfPos(hits[0]) + new Vector3(0, .7f, 0), clockTarget, "+2 s", .15f);
+            }
+            // a golden trio pays: coins fly to the purse
+            foreach (int s in hits.Where(h => Golden(shelves[h][0][0])))
+            {
+                coins += GoldPay;
+                PlayerPrefs.SetInt("coins", coins);
+                PlayerPrefs.Save();
+                Fx.Play("match", 1.9f);
+                Fx.Haptic(3);
+                Toast($"+{GoldPay} PIÈCES !");
+                for (int c = 0; c < 6; c++) Fly(ShelfPos(s) + new Vector3((c - 2.5f) * .25f, .7f, 0), coinTarget, null, .1f + c * .06f);
             }
 
+            foreach (int s in hits) TrioEvents(s, LevelGen.Id(shelves[s][0][0])); // the customer's, the sale's, a sealed bento popped
             yield return new WaitForSeconds(.08f); // let the trio register before it pops
-            var popping = hits.SelectMany(s => Enumerable.Range(0, 3).Select(i => views[(s, i)])).ToList();
-            for (float t = 0; t < .3f; t += Time.deltaTime)
+            // the trio swells, jumps and spins, then shrinks away
+            var popping = hits.SelectMany(s => Enumerable.Range(0, 3).Select(i => views[(s, i)].transform)).ToList();
+            var start = popping.Select(v => v.position).ToList();
+            for (float t = 0; t < .34f; t += Time.deltaTime)
             {
-                float k = t < .12f ? Mathf.Lerp(1, 1.35f, t / .12f) : Mathf.Lerp(1.35f, 0, (t - .12f) / .18f);
-                foreach (var go in popping) go.transform.localScale = Vector3.one * k;
+                float k = t < .12f ? Mathf.Lerp(1, 1.35f, t / .12f) : Mathf.Lerp(1.35f, 0, (t - .12f) / .22f);
+                for (int n = 0; n < popping.Count; n++)
+                {
+                    popping[n].localScale = Vector3.one * k;
+                    popping[n].position = start[n] + Vector3.up * .5f * Mathf.Sin(Mathf.PI * t / .34f);
+                    popping[n].localRotation = Quaternion.Euler(0, 720 * t, 0);
+                }
                 yield return null;
             }
             foreach (int s in hits)
@@ -589,7 +670,8 @@ public partial class Game : MonoBehaviour
     {
         // frozen products and crates stay put
         var cells = Enumerable.Range(0, shelves.Count).SelectMany(s => Enumerable.Range(0, 3).Select(i => (s, i)))
-            .Where(c => shelves[c.s][0][c.i] < 0 || LevelGen.Movable(shelves[c.s][0][c.i])).ToList();
+            .Where(c => (shelves[c.s][0][c.i] < 0 || LevelGen.Movable(shelves[c.s][0][c.i])) && !seals.ContainsKey(c)).ToList(); // sealed bentos too
+        pigeon = (-1, -1);
         var vals = LevelGen.Shuffle(cells.Select(c => shelves[c.s][0][c.i]).ToList(), rng);
         for (int k = 0; k < cells.Count; k++) shelves[cells[k].s][0][cells[k].i] = vals[k];
     }
@@ -632,7 +714,7 @@ public partial class Game : MonoBehaviour
     static readonly Color Ink = new(.14f, .19f, .29f), Gold = new(1f, .76f, .24f), Red = new(.91f, .3f, .27f),
         Cream = new(1f, .98f, .93f), Mist = new(.84f, .9f, .95f);
     Texture2D round, circle;
-    Texture2D[] icons; // bonus bar: undo, shuffle, time
+    Texture2D[] icons, hudIcons; // bonus bar: undo, shuffle, time; top bar: restart, pause
     GUIStyle pill, text;
 
     void InitGui()
@@ -722,10 +804,24 @@ public partial class Game : MonoBehaviour
 
         // top bar: level (red on HARD levels), coins, pause
         Panel(new Rect(40, top, 420, 110), hard ? Red : Cream);
-        Label(new Rect(40, top, 420, 110), hard ? $"NIVEAU {LevelName} · HARD" : $"NIVEAU {LevelName}", hard ? 42 : 52, hard ? Color.white : Ink);
+        Label(new Rect(40, top, 420, 110), hard && !daily ? $"NIVEAU {LevelName} · HARD" : LevelTitle, hard || daily ? 42 : 52, hard ? Color.white : Ink);
         CoinsPill(500, top);
+        coinTarget = new Vector2(555, top + 48); // the purse's coin
         GUI.enabled = live;
-        if (Button(new Rect(790, top, 250, 96), "Pause", Mist, 42)) OpenMenu(Menu.Pause);
+        // two round buttons: start the level over (so nobody reaches for "Annuler" to do it), and pause
+        hudIcons ??= new[] { Fx.Icon(6), Fx.Icon(7) };
+        for (int b = 0; b < 2; b++)
+        {
+            var r = new Rect(828 + b * 116, top, 96, 96);
+            if (Button(r, "", Mist))
+            {
+                if (b == 0) StartLevel();
+                else OpenMenu(Menu.Pause);
+            }
+            GUI.color = Ink;
+            GUI.DrawTexture(new Rect(r.x + 16, r.y + 14, 64, 64), hudIcons[b]);
+            GUI.color = Color.white;
+        }
         GUI.enabled = true;
 
         // timer: blinks red under 10 s
@@ -735,12 +831,14 @@ public partial class Game : MonoBehaviour
         var fill = low && Mathf.Repeat(Time.time, .5f) < .25f ? Color.white : low ? Red : Gold;
         Panel(new Rect(bar.x, bar.y, Mathf.Max(64, bar.width * time / total), bar.height), fill);
         Label(new Rect(bar.x + 30, bar.y, bar.width / 2, bar.height), $"{Mathf.CeilToInt(time)} s", 40, Color.white, true, TextAnchor.MiddleLeft);
+        clockTarget = new Vector2(bar.x + 90, bar.center.y);
         // moves against the target for the moves star; turns red once over it
         Label(new Rect(bar.center.x, bar.y, bar.width / 2 - 30, bar.height), $"{moves} / {par} coups", 40,
             moves > par ? new Color(1f, .75f, .75f) : Color.white, true, TextAnchor.MiddleRight);
 
         var boardTop = cam.WorldToScreenPoint(new Vector3(0, BoardTopY + .3f, 0));
         if (Time.time < tipUntil && !over) TipCard(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20); // a new obstacle explained, in the sign's place
+        else if (customerId >= 0 && !over) CustomerCard(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20); // a customer waits, in the sign's place
         else StoreFront(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20);
 
         // bonuses
@@ -753,7 +851,7 @@ public partial class Game : MonoBehaviour
         {
             float x = 45 + b * (bw + 45);
             // a spent bonus can be bought again with coins
-            bool free = left[b] > 0, can = (free || coins >= BonusPrice[b]) && (b != 0 || history.Count > 0);
+            bool free = left[b] > 0, can = (free || coins >= BonusPrice[b]) && (b != 0 || history.Count > 0) && !(daily && DailyTwist == 2);
             GUI.enabled = live && can;
             if (Button(new Rect(x, by, bw, bh), names[b], can ? Gold : Mist, 38, icons[b]))
             {
@@ -775,6 +873,8 @@ public partial class Game : MonoBehaviour
         GUI.enabled = true;
 
 
+        if (!over) DrawEvents(k);
+        DrawFlyers();
         if (Time.time < toastUntil)
         {
             float a = 1 - (toastUntil - Time.time); // 0→1 over the toast's life
@@ -903,7 +1003,7 @@ public partial class Game : MonoBehaviour
         int r = 0;
         if (!adUsed && Button(rows[r++], time <= 0 ? "Pub : +15 secondes" : "Pub : annuler 2 coups", Gold, 46)) ContinueAfterAd();
         if (Button(rows[r++], "Recommencer", adUsed ? Gold : Mist, 46)) StartLevel();
-        if (Button(rows[r], "Carte", Mist, 46)) OpenMenu(Menu.Map);
+        if (Button(rows[r], daily ? "Accueil" : "Carte", Mist, 46)) LeaveLevel();
         GUI.matrix = keep;
     }
 }

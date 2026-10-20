@@ -55,17 +55,18 @@ public partial class Game
         GUI.color = Color.white;
         StarCount(156, y, TotalStars);
         CoinsPill(W - 290, y);
+        DailyButton(new Rect(W - 290, y + 116, 250, 80));
         if (Application.isEditor && Button(new Rect(40, y + 116, 250, 80), "Catalogue", Mist, 34)) OpenMenu(Menu.Catalog); // editor only: review every product
 
         // logo, tilted like a hand-painted shop sign: drops in with a bounce, then bobs gently
-        float ly = y + 150 + 8 * Mathf.Sin(Time.time * 2);
+        float ly = y + 215 + 8 * Mathf.Sin(Time.time * 2); // below the second row of buttons (Catalogue, Défi du jour)
         var keep = GUI.matrix;
         GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(menuAt + .1f), new Vector2(W / 2 * k, (ly + 170) * k));
         GUIUtility.RotateAroundPivot(-4, new Vector2(W / 2 * k, (ly + 170) * k));
-        Logo(new Rect(0, ly, W, 190), "SHELF", 200);
-        Logo(new Rect(0, ly + 170, W, 190), "SORT", 200);
+        Logo(new Rect(0, ly, W, 190), "SHELF", 185);
+        Logo(new Rect(0, ly + 160, W, 190), "SORT", 185);
         GUI.matrix = keep;
-        var tag = new Rect(W / 2 - 340, y + 540, 680, 80);
+        var tag = new Rect(W / 2 - 340, y + 590, 680, 80);
         Panel(tag, Ink);
         Label(tag, "LE TOUR DU MONDE DES RAYONS", 38, Color.white);
 
@@ -140,7 +141,7 @@ public partial class Game
         float bx = card.x + 70, bw = card.width - 140;
         if (Button(new Rect(bx, card.y + 230, bw, 140), "Reprendre", Gold, 54)) menu = Menu.None;
         if (Button(new Rect(bx, card.y + 410, bw, 130), "Recommencer", Mist, 46)) { StartLevel(); menu = Menu.None; }
-        if (Button(new Rect(bx, card.y + 580, bw, 130), "Carte", Mist, 46)) OpenMenu(Menu.Map);
+        if (Button(new Rect(bx, card.y + 580, bw, 130), daily ? "Accueil" : "Carte", Mist, 46)) LeaveLevel();
         if (Button(new Rect(bx, card.y + 750, bw, 110), SoundOn ? "Son : oui" : "Son : non", Mist, 40)) ToggleSound();
         GUI.matrix = keep;
     }

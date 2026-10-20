@@ -63,7 +63,12 @@ public partial class Game
         criteria[1] = time >= baseTime * .4f;
         criteria[2] = !usedBonus && !adUsed;
         starsWon = criteria.Count(c => c);
-        starsPlayed = 0;
+        starsPlayed = coinsTicked = 0;
+        if (daily)
+        {
+            ScoreDaily(); // its own reward, nothing saved for the map's levels
+            return;
+        }
         PlayerPrefs.SetInt($"done{world}_{lvl}", 1);
         if (starsWon > Stars(world, lvl)) PlayerPrefs.SetInt($"stars{world}_{lvl}", starsWon);
 
@@ -79,14 +84,33 @@ public partial class Game
         unlockedMsg = opened > 0 ? $"Nouveau pays débloqué : {Worlds[opened].name} !" : null;
     }
 
-    // stars pop in one after another on the summary, each with a rising note
+    // stars drop in one after another on the summary, each with a rising note (confetti on the third), then the
+    // coins count up with little ticks
     void TickStars()
     {
-        if (!over || !won || starsPlayed >= starsWon) return;
-        if (Time.time < overAt + .45f + starsPlayed * .35f) return;
-        Fx.Play("pick", 1 + .25f * starsPlayed);
-        starsPlayed++;
+        if (!over || !won) return;
+        if (starsPlayed < starsWon && Time.time >= overAt + .45f + starsPlayed * .35f)
+        {
+            Fx.Play("pick", 1 + .25f * starsPlayed);
+            starsPlayed++;
+            if (starsPlayed == 3)
+            {
+                Fx.Burst(new Vector3(-1.5f, 1.5f, -2), 50);
+                Fx.Burst(new Vector3(1.5f, 1.5f, -2), 50);
+                Fx.Haptic(3);
+            }
+        }
+        int shown = CoinsShown;
+        if (shown - coinsTicked >= 5 || shown == gained && coinsTicked < gained)
+        {
+            coinsTicked = shown;
+            Fx.Play("drop", 1.4f + .6f * shown / Mathf.Max(1, gained));
+        }
     }
+
+    int coinsTicked;
+    float CoinsFrom => overAt + .6f + starsWon * .35f; // once the stars have landed
+    int CoinsShown => Mathf.RoundToInt(gained * Mathf.Clamp01((Time.time - CoinsFrom) / .7f));
 
     void PlayLevel(int w, int l)
     {
@@ -122,18 +146,19 @@ public partial class Game
         var card = new Rect(70, H / 2 - cardH / 2, W - 140, cardH);
         Panel(new Rect(card.x, card.y + 18, card.width, card.height), Darker(Cream));
         Panel(card, Cream);
-        Label(new Rect(card.x, card.y + 30, card.width, 60), $"NIVEAU {LevelName}", 44, Ink);
+        Label(new Rect(card.x, card.y + 30, card.width, 60), LevelTitle, 44, Ink);
         Label(new Rect(card.x, card.y + 90, card.width, 130), starsWon == 3 ? "PARFAIT !" : "BRAVO !", 110, Gold, true);
 
-        // big stars, popping in as TickStars plays them
+        // big stars, dropping in as TickStars plays them
         for (int s = 0; s < 3; s++)
         {
             float size = s == 1 ? 200 : 160;
             bool lit = s < starsPlayed;
             float pop = lit ? Mathf.Clamp01((Time.time - (overAt + .45f + s * .35f)) / .2f) : 1;
             size *= lit ? 1 + .4f * (1 - pop) : 1;
+            float drop = lit ? -140 * (1 - pop) * (1 - pop) : 0; // falls into place
             float cx = card.center.x + (s - 1) * 230, cy = card.y + 330 + (s == 1 ? -15 : 10);
-            Star(new Rect(cx - size / 2, cy - size / 2, size, size), lit);
+            Star(new Rect(cx - size / 2, cy - size / 2 + drop, size, size), lit);
         }
 
         // why
@@ -154,7 +179,7 @@ public partial class Game
         float y = card.y + 800;
         Panel(new Rect(card.center.x - 160, y, 320, 80), Mist);
         Panel(new Rect(card.center.x - 140, y + 15, 50, 50), Gold);
-        Label(new Rect(card.center.x - 80, y, 220, 80), $"+{gained}", 48, Ink);
+        Label(new Rect(card.center.x - 80, y, 220, 80), $"+{CoinsShown}", 48, Ink); // counting up after the stars
         if (unlockedMsg != null)
         {
             y += 95;
@@ -164,12 +189,20 @@ public partial class Game
         var next = new Rect(card.x + 60, card.yMax - 330, card.width - 120, 150);
         if (Button(next, "Suivant", Gold, 56))
         {
-            // back to the map, where the truck drives on to the next level and starts it
-            OpenMenu(Menu.Map);
-            driveThenPlay = lvl < LevelsPerWorld - 1 && truckGoal != truckT;
+            if (daily) ExitDaily();
+            else
+            {
+                // back to the map, where the truck drives on to the next level and starts it
+                OpenMenu(Menu.Map);
+                driveThenPlay = lvl < LevelsPerWorld - 1 && truckGoal != truckT && chestAt <= 0; // a chest to open first: no autoplay
+            }
         }
         float half = (card.width - 150) / 2;
-        if (Button(new Rect(card.x + 60, card.yMax - 150, half, 110), "Rejouer", Mist, 42)) PlayLevel(world, lvl);
-        if (Button(new Rect(card.x + 90 + half, card.yMax - 150, half, 110), "Carte", Mist, 42)) OpenMenu(Menu.Map);
+        if (Button(new Rect(card.x + 60, card.yMax - 150, half, 110), "Rejouer", Mist, 42))
+        {
+            if (daily) PlayDaily();
+            else PlayLevel(world, lvl);
+        }
+        if (Button(new Rect(card.x + 90 + half, card.yMax - 150, half, 110), daily ? "Accueil" : "Carte", Mist, 42)) LeaveLevel();
     }
 }

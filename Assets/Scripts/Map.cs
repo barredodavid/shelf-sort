@@ -99,6 +99,7 @@ public partial class Game
         scrollZ = CenterZ(truckT);
         var ahead = TruckPos(truckT + .05f) - TruckPos(truckT);
         truckYaw = Mathf.Atan2(-ahead.z, ahead.x) * Mathf.Rad2Deg;
+        OfferChest(); // a chest level just won: the chest card goes up
         // the country just finished: unveil its monument once, with a reward, the camera on the plaza
         if (Completed(world) && PlayerPrefs.GetInt($"revealed{world}", 0) == 0)
         {
@@ -378,6 +379,12 @@ public partial class Game
     void TapMap(Vector2 screen)
     {
         var p = new Vector2(screen.x / GuiScale, (Screen.height - screen.y) / GuiScale);
+        if (chestAt > 0) return; // the chest card is up
+        for (int g = (int)First; g <= Last; g++) // a tap on a chest beside a sign is the chest's (MapChest), not the shop's
+        {
+            var sign = ToGui(PadPos(g) + new Vector3(0, Products.SignY(mapWorld), -.48f));
+            if (HasChest(g % LevelsPerWorld) && Vector2.Distance(p, sign + new Vector2(143, -28)) < 80) return;
+        }
         if (p.y < SafeTopPx() + 150 || p.y > Screen.height / GuiScale - SafeBottomPx() - 230) return; // header and the bottom button
         for (int g = (int)First; g <= Last; g++)
         {
@@ -422,6 +429,11 @@ public partial class Game
     void MapScreen(float W, float H, float safeTop, float bottom)
     {
         if (!mapRoot) return;
+        if (chestAt > 0)
+        {
+            ChestCard(W, H, GuiScale);
+            return;
+        }
 
         // country name on the gate's board
         var board = ToGui(new Vector3(MapPos(GateT).x, 2.05f, MapPos(GateT).z));
@@ -471,6 +483,7 @@ public partial class Game
                 var tag = new Rect(c.x - 50, c.y - 82, 100, 44);
                 Panel(tag, Ink);
                 Label(tag, "DUR", 28, Color.white);
+                if (HasChest(l) && !ChestOpened(mapWorld, l)) MapChest(new Rect(c.x + 95, c.y - 70, 96, 84), l); // a chest to win here
             }
             if (!Done(mapWorld, l)) continue;
             var front = ToGui(PadPos(g) + new Vector3(0, 0, -.8f)); // the pavement's front edge
