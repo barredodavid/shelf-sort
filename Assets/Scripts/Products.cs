@@ -31,7 +31,7 @@ public static partial class Products
 
     // how much of its slot a product fills (Game.Wrap): 1 for most; less for those that look too big at full size
     // (or more for wide, flat ones that would look tiny)
-    public static float Fill(string name) => name.StartsWith("Pasta") ? .82f : name.StartsWith("Gyoza") || name.StartsWith("Yakitori") ? 1.25f : 1;
+    public static float Fill(string name) => name.StartsWith("Pasta") || name.StartsWith("Frites") ? .82f : name.StartsWith("Gyoza") || name.StartsWith("Yakitori") ? 1.25f : 1;
 
     // u that ends up facing the camera: the side at -Z (u = .75), shifted by the 35° yaw Game.Wrap gives products
     const float FrontU = .75f + 35f / 360f;

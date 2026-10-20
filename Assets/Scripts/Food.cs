@@ -68,9 +68,9 @@ public static partial class Products
         6 => Donut("DonutRose", C("#f58fb5"), sprinkles: true),
         7 => Pilon(),
         8 => Ketchup(),
-        9 => Cookie(),
-        10 => Muffin(),
-        _ => Cupcake(),
+        9 => Bagel(),
+        10 => Pancakes(),
+        _ => PeanutButter(),
     };
 
     // ---------- bakery ----------
@@ -86,16 +86,6 @@ public static partial class Products
             if (!sprinkles && Mathf.Abs(Mathf.Repeat(u * 14 + v * 2, 1) - .5f) < .07f) return Color.white; // drizzle
             return icing;
         }, .45f));
-        return root;
-    }
-
-    static GameObject Cupcake()
-    {
-        var root = new GameObject("Cupcake");
-        Spin(root, P(0, 0, .24f, 0, .31f, .36f, 0, .36f), Plain(C("#f28db2")), ribs: 16, ribAmp: .06f); // pleated paper
-        Spin(root, P(0, .32f, .35f, .32f, .37f, .4f, .29f, .47f, .31f, .53f, .21f, .62f, .22f, .68f, .1f, .78f, 0, .8f),
-            Paint((u, v) => Dot(u, v, 22, 10, .25f, .2f, 5, out float k) ? Sprinkle(k) : C("#fff3e6"), .35f));
-        Part(root, Prim(PrimitiveType.Sphere), Plain(C("#d7192a"), .7f), new(0, .84f, 0), scale: Vector3.one * .14f);
         return root;
     }
 
@@ -252,20 +242,6 @@ public static partial class Products
         Spin(m, P(0, .19f, .25f, .19f, .245f, .22f, .2f, .27f, .1f, .3f, 0, .305f), glossy); // top dome
     }
 
-    static GameObject Cookie()
-    {
-        var root = new GameObject("Cookie");
-        Spin(root, P(0, 0, .4f, 0, .43f, .04f, .41f, .09f, 0, .1f), Plain(C("#d69a52"), .2f));
-        // chips sit on the flat top (a spun disk's top has no room for a painted pattern)
-        var chip = Plain(C("#4a2a14"), .4f);
-        for (int i = 0; i < 8; i++)
-        {
-            float a = i * 2.4f, r = .08f + .27f * Hash(i, 1, 11);
-            Part(root, Prim(PrimitiveType.Sphere), chip, new(Mathf.Cos(a) * r, .1f, Mathf.Sin(a) * r), scale: new(.09f, .05f, .09f));
-        }
-        return root;
-    }
-
     static GameObject Tarte()
     {
         var root = new GameObject("Tarte");
@@ -278,15 +254,6 @@ public static partial class Products
             Part(root, Prim(PrimitiveType.Cube), crust, new(0, .12f, o), scale: new(len, .025f, .06f));
             Part(root, Prim(PrimitiveType.Cube), crust, new(o, .125f, 0), scale: new(.06f, .025f, len));
         }
-        return root;
-    }
-
-    static GameObject Muffin()
-    {
-        var root = new GameObject("Muffin");
-        Spin(root, P(0, 0, .25f, 0, .3f, .34f, 0, .34f), Plain(C("#6fb6e8")), ribs: 16, ribAmp: .06f);
-        Spin(root, P(0, .3f, .36f, .3f, .43f, .36f, .42f, .48f, .32f, .6f, .16f, .66f, 0, .68f),
-            Paint((u, v) => Dot(u, v, 18, 8, .45f, .2f, 4, out _) ? C("#3e2210") : C("#b0683a"), .3f));
         return root;
     }
 
@@ -471,24 +438,60 @@ public static partial class Products
 
     static GameObject Frites()
     {
-        // red carton (four panels flaring outwards) with a fan of fries sticking out
+        // fry carton: one card wall widening from a narrow base, its front scooped down in a curve so the fries show,
+        // the back standing taller; red with a white rim and a yellow stripe outside, darker red inside
         var root = new GameObject("Frites");
-        var box = Plain(C("#d9261c"), .4f);
-        const float h = .5f;
-        foreach (var (pos, euler, size) in new (Vector3, Vector3, Vector3)[]
-                 {
-                     (new(0, h / 2, -.16f), new(-8, 0, 0), new(.5f, h, .04f)), // front
-                     (new(0, h / 2, .16f), new(8, 0, 0), new(.5f, h, .04f)), // back
-                     (new(-.25f, h / 2, 0), new(0, 0, -6), new(.04f, h, .34f)),
-                     (new(.25f, h / 2, 0), new(0, 0, 6), new(.04f, h, .34f)),
-                 })
-            Part(root, Prim(PrimitiveType.Cube), box, pos, euler, size);
-        Part(root, Prim(PrimitiveType.Cube), Plain(C("#ffd23f"), .4f), new(0, h * .55f, -.2f), new(-8, 0, 0), new(.36f, .07f, .02f)); // logo band
-        for (int i = 0; i < 16; i++)
+        const int M = 12;
+        Vector2 Lo(float s) => Corner(s, .17f, .1f);
+        Vector2 Hi(float s) => Corner(s, .25f, .15f);
+        // a point on a rectangle's outline, s in 0..4: front (-z, left to right), right, back, left
+        static Vector2 Corner(float s, float hx, float hz)
         {
-            float x = -.19f + .38f * (i / 2) / 7f, z = i % 2 == 0 ? -.06f : .06f, len = .55f + .2f * Hash(i, 2, 13);
-            var fry = Plain(C(Hash(i, 5, 13) < .5f ? "#ffd23f" : "#f2b632"), .3f);
-            Part(root, Prim(PrimitiveType.Cube), fry, new(x * 1.2f, .15f + len / 2, z), new((Hash(i, 4, 13) - .5f) * 14, 0, -x * 70), new(.07f, len, .07f));
+            int e = Mathf.Min((int)s, 3);
+            float t = s - e;
+            return e switch
+            {
+                0 => new(Mathf.Lerp(-hx, hx, t), -hz),
+                1 => new(hx, Mathf.Lerp(-hz, hz, t)),
+                2 => new(Mathf.Lerp(hx, -hx, t), hz),
+                _ => new(-hx, Mathf.Lerp(hz, -hz, t)),
+            };
+        }
+        float Top(float s) => s < 1 ? .5f - .13f * Mathf.Sin(Mathf.PI * s) // the scoop
+            : s < 2 ? Mathf.Lerp(.5f, .6f, s - 1) : s < 3 ? .6f : Mathf.Lerp(.6f, .5f, s - 3);
+        Mesh Wall(bool outside)
+        {
+            var verts = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var tris = new List<int>();
+            for (int k = 0; k <= 4 * M; k++)
+            {
+                float s = (float)k / M;
+                Vector2 lo = Lo(s), hi = Hi(s);
+                verts.Add(new Vector3(lo.x, 0, lo.y));
+                verts.Add(new Vector3(hi.x, Top(s), hi.y));
+                uvs.Add(new Vector2(s / 4, 0));
+                uvs.Add(new Vector2(s / 4, Top(s) / .6f));
+            }
+            for (int k = 0; k < 4 * M; k++)
+            {
+                int a = 2 * k, b = a + 2;
+                bool flip = Vector3.Dot(Vector3.Cross(verts[a + 1] - verts[a], verts[b] - verts[a]), verts[a]) < 0 == outside;
+                tris.AddRange(flip ? new[] { a, b, a + 1, a + 1, b, b + 1 } : new[] { a, a + 1, b, a + 1, b + 1, b });
+            }
+            return Finish(verts, uvs, tris);
+        }
+        Part(root, Wall(true), Paint((u, v) => v > .93f ? Color.white : Mathf.Abs(v - .4f) < .06f ? C("#ffc93a") : C("#d9261c"), .4f), Vector3.zero);
+        Part(root, Wall(false), Plain(C("#a81a14"), .3f), Vector3.zero);
+        Part(root, Prim(PrimitiveType.Cube), Plain(C("#a81a14"), .3f), new(0, .01f, 0), scale: new(.34f, .02f, .2f)); // the base
+        // thin golden fries in three rows, fanning out a little, their tips browner
+        Material Fry(string c) => Paint((u, v) => Color.Lerp(C(c), C("#d2902e"), Mathf.Pow(v, 3)), .35f);
+        var fries = new[] { Fry("#f7d873"), Fry("#f0c75a") };
+        for (int i = 0; i < 24; i++)
+        {
+            float x = -.19f + .38f * (i / 3) / 7f + (Hash(i, 6, 13) - .5f) * .03f, z = (i % 3 - 1) * .065f, len = .5f + .2f * Hash(i, 2, 13);
+            Part(root, Prim(PrimitiveType.Cube), fries[i % 2], new(x, .12f + len / 2, z), new((Hash(i, 4, 13) - .5f) * 16 - z * 60, Hash(i, 7, 13) * 40, -x * 50),
+                new(.045f, len, .045f));
         }
         return root;
     }
@@ -584,38 +587,150 @@ public static partial class Products
     static GameObject Popcorn()
     {
         var root = new GameObject("Popcorn");
+        // striped bucket with a white rolled rim, popcorn heaped over the top and two kernels fallen beside it. Each
+        // kernel is a knobbly cluster of lobes, cream with a buttery one and now and then a bit of brown hull.
         Spin(root, P(0, 0, .22f, 0, .3f, .62f, 0, .62f), Paint((u, v) => (int)(u * 12) % 2 == 0 ? C("#e8312f") : Color.white, .3f));
-        var corn = Plain(C("#fff1c4"), .2f);
-        for (int i = 0; i < 16; i++)
+        Spin(root, Torus(.3f, .02f), Plain(Color.white, .4f), new(0, .6f, 0));
+        var cream = Plain(C("#fff6dc"), .25f);
+        var butter = Plain(C("#f6d77a"), .3f);
+        var hull = Plain(C("#a8702e"), .4f);
+        void Kernel(Vector3 at, float size, int seed)
         {
-            float a = i * 2.4f, r = .25f * Mathf.Sqrt(Hash(i, 4, 17)), y = .64f + .16f * (1 - r / .25f) + .04f * Hash(i, 5, 17);
-            Part(root, Prim(PrimitiveType.Sphere), corn, new(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r), scale: Vector3.one * (.12f + .04f * Hash(i, 6, 17)));
+            for (int l = 0; l < 4; l++)
+            {
+                var off = new Vector3(Hash(seed, l, 1) - .5f, Hash(seed, l, 2) - .5f, Hash(seed, l, 3) - .5f) * size * .7f;
+                Part(root, Prim(PrimitiveType.Sphere), l == 1 ? butter : cream, at + off, scale: Vector3.one * size * (1 - l * .13f));
+            }
+            if (Hash(seed, 9, 4) < .4f) Part(root, Prim(PrimitiveType.Sphere), hull, at + Vector3.down * size * .3f, scale: Vector3.one * size * .35f);
         }
+        for (int i = 0; i < 30; i++)
+        {
+            float a = i * 2.4f, r = .27f * Mathf.Sqrt(Hash(i, 4, 17)), y = .64f + .14f * (1 - r / .27f) + .05f * Hash(i, 5, 17);
+            Kernel(new(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r), .085f + .025f * Hash(i, 6, 17), i);
+        }
+        Kernel(new(.2f, .04f, -.3f), .08f, 40); // fallen out
+        Kernel(new(-.12f, .04f, -.34f), .07f, 41);
         return root;
     }
 
+    // ketchup: the diner squeeze bottle, tall and glossy red, white flip cap with a pointed red nozzle, a cream label
+    // with the name and a little tomato under it
     static GameObject Ketchup()
     {
-        var root = new GameObject("Ketchup");
+        const float H = .84f, R = .24f, labelLo = .2f, labelHi = .56f;
         var cv = new Canvas(256, 256);
-        cv.Paint((u, v) => v > .25f && v < .62f ? C("#fff4e0") : C("#d81f26"));
-        LatheText(cv, "KETCHUP", 2 * Mathf.PI * .29f, .85f, .37f, .13f, C("#d81f26"));
-        Spin(root, P(0, 0, .24f, 0, .28f, .05f, .29f, .55f, .25f, .68f, .14f, .78f, .13f, .84f, 0, .85f), Textured(cv, .55f));
-        Spin(root, P(0, .84f, .14f, .84f, .14f, .92f, .06f, 1f, 0, 1.02f), Plain(C("#fbfbf7"), .4f));
+        cv.Paint((u, v) =>
+        {
+            float y = v * H;
+            if (y < labelLo || y > labelHi) return C("#d81f26") * (Sheen(u) * 1.1f);
+            float f = (y - labelLo) / (labelHi - labelLo);
+            if (f < .05f || f > .95f) return C("#2f8a3a"); // green edges
+            // the tomato on the front, under the name (in label-height units)
+            float du = Mathf.DeltaAngle(FrontU * 360, u * 360) / 360 * 2 * Mathf.PI * R / (labelHi - labelLo);
+            var p = new Vector2(du, f - .3f);
+            if (Mathf.Pow(p.x / .13f, 2) + Mathf.Pow(p.y / .11f, 2) < 1) return C("#e3261c");
+            if (Mathf.Abs(p.x) < .07f && p.y > .09f && p.y < .15f && Mathf.Abs(Mathf.Sin(p.x * 70)) > .3f) return C("#2f8a3a"); // its leaves
+            return C("#fff4e0");
+        });
+        LatheText(cv, "KETCHUP", 2 * Mathf.PI * R, H, labelLo + (labelHi - labelLo) * .72f, .09f, C("#d81f26"));
+        var root = Spun("Ketchup", P(0, 0, .22f, 0, .24f, .03f, .24f, .62f, .2f, .72f, .1f, .8f, .08f, H, 0, H), cv, .75f);
+        Spin(root, P(0, .82f, .1f, .82f, .105f, .86f, .1f, .92f, .06f, .94f, 0, .94f), Plain(C("#fbfbf7"), .5f)); // flip cap
+        Spin(root, P(0, .93f, .032f, .93f, .012f, 1.08f, 0, 1.09f), Plain(C("#d81f26"), .6f)); // nozzle
         return root;
     }
 
-    // fried chicken drumstick: crispy teardrop of meat, white bone with its knob, leaning diagonally
+    // fried chicken drumstick lying on a red-and-white checked paper liner: a long teardrop of meat under craggy golden
+    // breading, crunchy lumps all over, the pale bone poking out with its knobbly end
     static GameObject Pilon()
     {
         var root = new GameObject("Pilon");
-        var body = Tilted(root, new(0, 0, -50), new(-.1f, .12f, 0));
-        Spin(body, P(0, 0, .2f, .03f, .3f, .15f, .32f, .3f, .27f, .45f, .17f, .58f, .1f, .66f, 0, .68f),
-            Paint((u, v) => Color.Lerp(C("#b45a1c"), C("#e5993e"), Mathf.PerlinNoise(u * 24, v * 12)), .35f));
-        var bone = Plain(C("#fbf6ea"), .4f);
-        Part(body, Prim(PrimitiveType.Cylinder), bone, new(0, .78f, 0), scale: new(.1f, .14f, .1f));
-        Part(body, Prim(PrimitiveType.Sphere), bone, new(-.05f, .93f, 0), scale: Vector3.one * .14f);
-        Part(body, Prim(PrimitiveType.Sphere), bone, new(.05f, .93f, 0), scale: Vector3.one * .14f);
+        Part(root, Prim(PrimitiveType.Cube), Paint((u, v) => ((int)(u * 8) + (int)(v * 8)) % 2 == 0 ? C("#d9261c") : Color.white, .2f),
+            new(0, .01f, 0), new(0, 15, 0), new(.95f, .02f, .7f));
+        var body = Tilted(root, new(0, 0, -72), new(-.3f, .2f, 0));
+        var profile = P(0, 0, .17f, .03f, .25f, .12f, .27f, .25f, .24f, .4f, .17f, .52f, .1f, .6f, .07f, .64f, 0, .65f);
+        var crust = Paint((u, v) => Color.Lerp(C("#9a4a14"), C("#e2a046"), Mathf.PerlinNoise(u * 26, v * 14)), .45f);
+        Spin(body, profile, crust, ribs: 7, ribAmp: .06f);
+        for (int i = 0; i < 26; i++) // crunchy lumps of breading
+        {
+            float y = .05f + .5f * Hash(i, 1, 21), a = Hash(i, 2, 21) * 2 * Mathf.PI, r = 0;
+            for (int k = 1; k < profile.Length; k++)
+                if (profile[k].y >= y) { r = Mathf.Lerp(profile[k - 1].x, profile[k].x, (y - profile[k - 1].y) / (profile[k].y - profile[k - 1].y)); break; }
+            Part(body, Prim(PrimitiveType.Sphere), crust, new(Mathf.Cos(a) * r * .95f, y, Mathf.Sin(a) * r * .95f), new(0, a * 57, 0),
+                new Vector3(.09f, .06f, .08f) * (.8f + .5f * Hash(i, 3, 21)));
+        }
+        var bone = Plain(C("#f6efdf"), .4f);
+        Part(body, Prim(PrimitiveType.Cylinder), bone, new(0, .75f, 0), scale: new(.07f, .13f, .07f));
+        Part(body, Prim(PrimitiveType.Sphere), bone, new(-.035f, .9f, 0), scale: Vector3.one * .1f);
+        Part(body, Prim(PrimitiveType.Sphere), bone, new(.035f, .9f, 0), scale: Vector3.one * .1f);
+        return root;
+    }
+
+    // pancakes: a stack of four golden pancakes on a white plate, pale crumb showing round their edges, a pat of butter
+    // melting on top and maple syrup pooled over it, running down the sides
+    static GameObject Pancakes()
+    {
+        var root = new GameObject("Pancakes");
+        Spin(root, P(0, 0, .46f, 0, .48f, .03f, .44f, .05f, 0, .04f), Plain(C("#fbfbf7"), .7f));
+        var cake = Paint((u, v) => v < .2f || v > .8f ? Color.Lerp(C("#b8742e"), C("#d39548"), Mathf.PerlinNoise(u * 20, v * 4))
+            : C("#f2d58e"), .3f); // browned faces, pale edge
+        for (int i = 0; i < 4; i++)
+            Spin(root, P(0, 0, .34f, 0, .37f, .02f, .38f, .05f, .36f, .09f, 0, .1f), cake,
+                new((Hash(i, 1, 5) - .5f) * .04f, .04f + i * .095f, (Hash(i, 2, 5) - .5f) * .04f));
+        var syrup = Plain(C("#b0601a"), .9f);
+        float top = .04f + 4 * .095f + .01f;
+        Spin(root, P(0, top - .01f, .3f, top - .01f, .28f, top + .01f, 0, top + .015f), syrup); // pooled on top
+        for (int k = 0; k < 6; k++) // drips running down the sides
+        {
+            float a = (k * 60 + 20) * Mathf.Deg2Rad, len = .1f + .12f * Hash(k, 3, 5);
+            Part(root, Prim(PrimitiveType.Sphere), syrup, new(Mathf.Cos(a) * .37f, top - len / 2, Mathf.Sin(a) * .37f), new(0, -a * Mathf.Rad2Deg, 0),
+                new(.03f, len, .07f));
+        }
+        Part(root, Prim(PrimitiveType.Cube), Plain(C("#fbe7a1"), .4f), new(.02f, top + .035f, 0), new(0, 25, 0), new(.14f, .06f, .14f)); // butter
+        return root;
+    }
+
+    // peanut butter: a classic jar, closed with a ridged red screw lid; a cream label with a blue band, the name on
+    // two lines and a big peanut
+    static GameObject PeanutButter()
+    {
+        const float H = .66f, R = .34f, labelLo = .12f, labelHi = .5f;
+        var cv = new Canvas(256, 256);
+        cv.Paint((u, v) =>
+        {
+            float y = v * H;
+            if (y < labelLo || y > labelHi) return C("#c08442") * Sheen(u);
+            float f = (y - labelLo) / (labelHi - labelLo);
+            if (f > .84f) return C("#1f4fa8"); // blue band at the top of the label
+            float du = Mathf.DeltaAngle(FrontU * 360, u * 360) / 360 * 2 * Mathf.PI * R / (labelHi - labelLo);
+            var p = new Vector2(du, f - .17f);
+            float peanut = Mathf.Min(Mathf.Pow((p.x + .11f) / .15f, 2) + Mathf.Pow(p.y / .12f, 2), Mathf.Pow((p.x - .11f) / .15f, 2) + Mathf.Pow(p.y / .11f, 2));
+            return peanut < 1 ? C("#c9954e") : C("#fff4dc"); // a peanut: two bumps side by side
+        });
+        LatheText(cv, "PEANUT", 2 * Mathf.PI * R, H, labelLo + (labelHi - labelLo) * .7f, .075f, C("#8a4a1c"));
+        LatheText(cv, "BUTTER", 2 * Mathf.PI * R, H, labelLo + (labelHi - labelLo) * .47f, .06f, C("#1f4fa8"));
+        var root = Spun("PeanutButter", P(0, 0, .3f, 0, .33f, .03f, .34f, .08f, .34f, .56f, .31f, .62f, .3f, H, 0, H), cv, .6f);
+        Spin(root, P(0, .6f, .33f, .6f, .345f, .62f, .345f, .76f, .33f, .78f, 0, .78f), Paint((u, v) => Ridged(C("#d7261e"), u), .45f)); // red screw lid
+        return root;
+    }
+
+    // New York bagel sandwich on a sheet of baking paper: the bottom half, a thick layer of cream cheese, folds of
+    // smoked salmon peeking out all round, the shiny golden top half sprinkled with sesame
+    static GameObject Bagel()
+    {
+        var root = new GameObject("Bagel");
+        Part(root, Prim(PrimitiveType.Cube), Plain(C("#efe6cf"), .2f), new(0, .005f, 0), new(0, 20, 0), new(.82f, .01f, .82f));
+        var crust = Paint((u, v) => Color.Lerp(C("#9a5520"), C("#cf8a3e"), Mathf.PerlinNoise(u * 10, v * 6)), .6f);
+        Spin(root, Torus(.2f, .13f), crust, new(0, .01f, 0), scale: new(1, .5f, 1)); // bottom half
+        Spin(root, Torus(.2f, .135f), Plain(C("#f8f6ee"), .3f), new(0, .1f, 0), scale: new(1.04f, .32f, 1.04f), ribs: 9, ribAmp: .04f); // cream cheese
+        var salmon = Paint((u, v) => Mathf.Repeat(u * 5 + v * 2, 1) < .15f ? C("#ffd2bf") : C("#f47c4a"), .6f);
+        for (int k = 0; k < 7; k++)
+        {
+            float a = k * 360f / 7 + 10;
+            Part(root, Prim(PrimitiveType.Sphere), salmon, Quaternion.Euler(0, a, 0) * Vector3.right * .3f + Vector3.up * .135f,
+                new(0, a, 8 * (k % 2 * 2 - 1)), new(.14f, .03f, .17f));
+        }
+        Spin(root, Torus(.2f, .13f), Paint((u, v) => v > .5f && Dot(u, v, 26, 10, .55f, .28f, 7, out _) ? C("#f5ead0")
+            : Color.Lerp(C("#9a5520"), C("#cf8a3e"), Mathf.PerlinNoise(u * 10, v * 6)), .6f), new(0, .11f, 0), scale: new(1, .62f, 1)); // top, with sesame
         return root;
     }
 
