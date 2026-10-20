@@ -39,7 +39,7 @@ public partial class Game : MonoBehaviour
     readonly HashSet<int> locked = new(); // shelves mid-animation (popping trio, row sliding forward): no picking or dropping there
     float time, total, lastMatch, toastUntil, overAt;
     bool hard, busy, over, adUsed, won, started;
-    string title, subtitle, toast;
+    string title, subtitle, toast, stickerMsg; // stickerMsg: a sticker won with the level (Collection.cs)
     Camera cam;
     Transform root;
     System.Random rng = new();
@@ -174,7 +174,7 @@ public partial class Game : MonoBehaviour
                      ("ice",all.Any(LevelGen.IsFrozen), "Produit gelé : pose 2 produits pareils à côté pour le libérer"),
                      ("box", all.Any(LevelGen.IsBoxed), "Carton mystère : attrape-le pour voir ce qu'il cache"),
                      ("crate", all.Contains(LevelGen.Crate), "Caisse : fais un trio sur une étagère voisine pour la casser"),
-                     ("pigeon", twist == 0, "Pigeon : touche-le pour le chasser du produit sur lequel il s'est posé"),
+                     ("pigeon", twist == 0, "Pigeon : touche-le vite pour le chasser (+3 pièces), sinon il emporte le produit ailleurs !"),
                      ("riposo", twist == 1, "Sieste : une étagère ferme quelques secondes, attends qu'elle rouvre"),
                      ("bento", twist == 2, "Bento scellé : il s'ouvre au bout de 3 coups"),
                      ("promo", twist == 3, "Promo flash : fais vite le trio du produit à -50 % pour un bonus"),

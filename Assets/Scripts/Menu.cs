@@ -56,10 +56,14 @@ public partial class Game
         StarCount(156, y, TotalStars);
         CoinsPill(W - 290, y);
         DailyButton(new Rect(W - 290, y + 116, 250, 80));
-        if (Application.isEditor && Button(new Rect(40, y + 116, 250, 80), "Catalogue", Mist, 34)) OpenMenu(Menu.Catalog); // editor only: review every product
+        if (Button(new Rect(40, y + 116, 250, 80), "Collection", Mist, 34))
+        {
+            catalogWorld = world;
+            OpenMenu(Menu.Catalog); // the sticker album
+        }
 
         // logo, tilted like a hand-painted shop sign: drops in with a bounce, then bobs gently
-        float ly = y + 215 + 8 * Mathf.Sin(Time.time * 2); // below the second row of buttons (Catalogue, Défi du jour)
+        float ly = y + 215 + 8 * Mathf.Sin(Time.time * 2); // below the second row of buttons (Collection, Défi du jour)
         var keep = GUI.matrix;
         GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(menuAt + .1f), new Vector2(W / 2 * k, (ly + 170) * k));
         GUIUtility.RotateAroundPivot(-4, new Vector2(W / 2 * k, (ly + 170) * k));

@@ -1,17 +1,22 @@
 using UnityEngine;
 
-// Editor-only catalog: a country's 12 products on 4 shelves, numbered, seen at the same angle as in a level,
-// to review them one by one. Opened from the title screen's "Catalogue" button.
+// The sticker album (Collection.cs): a country's 12 products on 4 shelves, seen at the same angle as in a level.
+// Stickers owned stand in full colour with their name; missing ones are dark silhouettes marked "?". In the editor
+// a "Tout" button shows every product, to review them one by one.
 public partial class Game
 {
     int catalogWorld;
+    bool catalogAll; // editor: every product, owned or not
+    Material silhouette;
     readonly Vector3[] catalogPos = new Vector3[Products.Count];
-    readonly string[] catalogNames = new string[Products.Count];
 
-    const float CatalogTop = 260; // GUI pixels under the safe area taken by the header
+    const float CatalogTop = 330; // GUI pixels under the safe area taken by the header and the album's progress
+
+    bool Shown(int id) => catalogAll || Owned(catalogWorld, id);
 
     void RenderCatalog()
     {
+        silhouette ??= new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial) { color = new Color(.22f, .24f, .3f) };
         float H = Screen.height / GuiScale, top = SafeTopPx() + CatalogTop, rowPx = (H - top - 60) / 4;
         for (int r = 0; r < 4; r++)
         {
@@ -21,10 +26,8 @@ public partial class Game
             for (int c = 0; c < 3; c++)
             {
                 int id = r * 3 + c;
-                var model = Products.Make(catalogWorld, id);
-                catalogNames[id] = model.name;
                 catalogPos[id] = new Vector3((c - 1) * 2.4f, y, 0);
-                Wrap(model, catalogPos[id], 1.15f, "catalog", null);
+                Wrap(Products.Make(catalogWorld, id), catalogPos[id], 1.15f, "catalog", Shown(id) ? null : silhouette);
             }
         }
     }
@@ -45,13 +48,27 @@ public partial class Game
                 Render();
             }
 
-        // number and name under each product
+        // the album's progress, and what a full one pays
+        int n = StickerCount(catalogWorld);
+        bool full = n == Products.Count;
+        var bar = new Rect(40, y + 120, W - 80, 90);
+        Panel(bar, full ? Gold : Cream);
+        Label(new Rect(bar.x + 30, bar.y, 400, bar.height), $"{n} / {Products.Count} autocollants", 38, Ink, false, TextAnchor.MiddleLeft);
+        Label(new Rect(bar.center.x, bar.y, bar.width / 2 - 30, bar.height), full ? "Album complet !" : $"Complet : +{AlbumCoins} pièces", 34,
+            full ? Red : new Color(.4f, .45f, .55f), false, TextAnchor.MiddleRight);
+        if (Application.isEditor && Button(new Rect(W - 200, y + 230, 160, 70), catalogAll ? "Album" : "Tout", Mist, 30))
+        {
+            catalogAll = !catalogAll;
+            Render();
+        }
+
+        // name under each sticker owned, "?" under the missing ones
         for (int id = 0; id < Products.Count; id++)
         {
             var p = ToGui(catalogPos[id] + new Vector3(0, -.2f, -.9f));
             var tag = new Rect(p.x - 150, p.y - 4, 300, 52);
             Panel(tag, Ink);
-            Label(tag, $"{id + 1}. {catalogNames[id]}", 30, Color.white);
+            Label(tag, Shown(id) ? ProductNames[catalogWorld][id] : "?", 30, Color.white);
         }
     }
 }

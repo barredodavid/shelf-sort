@@ -64,12 +64,15 @@ public partial class Game
         criteria[2] = !usedBonus && !adUsed;
         starsWon = criteria.Count(c => c);
         starsPlayed = coinsTicked = 0;
+        stickerMsg = null;
         if (daily)
         {
             ScoreDaily(); // its own reward, nothing saved for the map's levels
             return;
         }
         PlayerPrefs.SetInt($"done{world}_{lvl}", 1);
+        chestWon = HasChest(lvl);
+        stickerMsg = starsWon == 3 && Stars(world, lvl) < 3 && Random.value < StickerOnThreeStars ? GiveSticker(world) : null; // a first three-star win, now and then
         if (starsWon > Stars(world, lvl)) PlayerPrefs.SetInt($"stars{world}_{lvl}", starsWon);
 
         gained = 10 * starsWon + (hard ? 15 : 0);
@@ -142,7 +145,7 @@ public partial class Game
     // Win summary: stars (animated), why each one was earned, reward, what's next
     void SummaryCard(float W, float H, float k)
     {
-        float cardH = unlockedMsg != null ? 1300 : 1220;
+        float cardH = 1220 + (unlockedMsg != null ? 80 : 0) + (stickerMsg != null ? 80 : 0);
         var card = new Rect(70, H / 2 - cardH / 2, W - 140, cardH);
         Panel(new Rect(card.x, card.y + 18, card.width, card.height), Darker(Cream));
         Panel(card, Cream);
@@ -184,6 +187,11 @@ public partial class Game
         {
             y += 95;
             Label(new Rect(card.x, y, card.width, 60), unlockedMsg, 40, Red, true);
+        }
+        if (stickerMsg != null)
+        {
+            y += 80;
+            Label(new Rect(card.x, y, card.width, 60), stickerMsg, 38, Gold, true);
         }
 
         var next = new Rect(card.x + 60, card.yMax - 330, card.width - 120, 150);

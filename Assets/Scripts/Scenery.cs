@@ -318,6 +318,74 @@ public static partial class Products
         return root;
     }
 
+    // a Paris rock dove standing on y = 0, facing -Z: an egg-shaped blue-grey body leaning forward on a puffed chest,
+    // purple-and-green sheen round the neck, pale wings folded on its back crossed by two black bars, a dark tail
+    // ending in a black band, a small round head with an orange eye, a dark beak with its white cere, red feet with
+    // toes. Its head is a child named "head" (to peck), its wings "wing" (to flap, hinged at the shoulder).
+    public static GameObject Pigeon()
+    {
+        var root = new GameObject("Pigeon");
+        var grey = Plain(C("#8e98a8"), .35f);
+        var pale = Plain(C("#b4bcc8"), .35f);
+        var black = Plain(C("#2a2d33"), .3f);
+        var red = Plain(C("#d9576a"), .3f);
+        Part(root, Sphere, grey, new(0, .3f, .04f), new(-18, 0, 0), new(.4f, .38f, .62f)); // body, leaning forward
+        Part(root, Sphere, grey, new(0, .32f, -.14f), scale: new(.34f, .36f, .3f)); // the puffed chest
+        Part(root, Sphere, Paint((u, v) => Color.Lerp(C("#5e9c80"), C("#8a5a9e"), .5f + .5f * Mathf.Sin(u * 18)), .85f), new(0, .46f, -.18f), new(-20, 0, 0), new(.25f, .26f, .24f)); // the shimmering neck
+        foreach (int s in new[] { -1, 1 })
+        {
+            var wing = new GameObject("wing").transform; // hinged at the shoulder, the folded wing hanging back from it
+            wing.SetParent(root.transform, false);
+            wing.localPosition = new(s * .15f, .4f, -.06f);
+            wing.localRotation = Quaternion.Euler(0, 0, s * 12);
+            Part(wing.gameObject, Sphere, pale, new(s * .03f, -.06f, .17f), new(-12, 0, 0), new(.12f, .2f, .46f));
+            foreach (float z in new[] { .14f, .26f }) // the two black bars
+                Part(wing.gameObject, Sphere, black, new(s * .075f, -.07f, z), new(-12, 0, 0), new(.03f, .14f, .06f));
+            Part(wing.gameObject, Sphere, black, new(s * .03f, -.04f, .38f), new(-12, 0, 0), new(.08f, .06f, .14f)); // dark wing tip
+            Part(root, Cylinder, red, new(s * .07f, .05f, -.02f), scale: new(.035f, .05f, .035f)); // leg
+            foreach (float a in new[] { -30f, 0, 30 }) // toes
+                Part(root, Cube, red, new(s * .07f + .05f * Mathf.Sin(a * Mathf.Deg2Rad), .01f, -.02f - .05f * Mathf.Cos(a * Mathf.Deg2Rad)), new(0, a, 0), new(.025f, .02f, .1f));
+        }
+        Part(root, Cube, grey, new(0, .27f, .38f), new(-20, 0, 0), new(.2f, .04f, .22f)); // tail
+        Part(root, Cube, black, new(0, .23f, .49f), new(-20, 0, 0), new(.205f, .045f, .06f)); // its black band
+        var head = new GameObject("head").transform;
+        head.SetParent(root.transform, false);
+        head.localPosition = new(0, .6f, -.24f);
+        Part(head.gameObject, Sphere, grey, Vector3.zero, scale: new(.2f, .2f, .22f));
+        foreach (int s in new[] { -1, 1 })
+        {
+            Part(head.gameObject, Sphere, Plain(C("#e8742a"), .7f), new(s * .085f, .025f, -.04f), scale: Vector3.one * .055f); // orange eye
+            Part(head.gameObject, Sphere, black, new(s * .1f, .028f, -.045f), scale: Vector3.one * .028f); // pupil
+        }
+        Part(head.gameObject, Sphere, Plain(C("#eef0f2"), .4f), new(0, .025f, -.1f), scale: new(.05f, .035f, .05f)); // white cere
+        Part(head.gameObject, Cube, Plain(C("#3a3a40"), .4f), new(0, -.005f, -.15f), new(12, 0, 0), new(.035f, .03f, .09f)); // beak
+        return root;
+    }
+
+    // a treasure chest for the map: plank box, domed lid, gold bands round both and a gold lock at the front (-Z).
+    // ready: its colours; otherwise faded to grey (the level still to win)
+    public static GameObject Chest(bool ready)
+    {
+        var root = new GameObject("Chest");
+        Color Tone(string hex) => ready ? C(hex) : Color.Lerp(C(hex), C("#9aa1ad"), .75f);
+        var wood = Paint((u, v) => Tone(Mathf.Repeat(v * 3, 1) < .08f ? "#5a3418" : "#9a5a2a"), .3f);
+        var gold = Plain(Tone("#f2c230"), .8f);
+        Part(root, Cube, wood, new(0, .25f, 0), scale: new(.8f, .5f, .55f)); // the box
+        Part(root, Sphere, gold, new(0, .48f, 0), scale: new(.66f, .14f, .44f)); // the coins heaped inside, seen once open
+        var lid = new GameObject("lid"); // hinged at the back edge, so it swings open (Chest.cs)
+        lid.transform.SetParent(root.transform, false);
+        lid.transform.localPosition = new Vector3(0, .5f, .275f);
+        Part(lid, Cylinder, wood, new(0, 0, -.275f), new(0, 0, 90), new(.55f, .4f, .55f)); // the domed lid: a log lying along X
+        foreach (float x in new[] { -.26f, .26f })
+        {
+            Part(root, Cube, gold, new(x, .25f, 0), scale: new(.08f, .52f, .57f));
+            Part(lid, Cylinder, gold, new(x, 0, -.275f), new(0, 0, 90), new(.58f, .04f, .58f));
+        }
+        Part(root, Cube, gold, new(0, .46f, -.29f), scale: new(.16f, .18f, .04f)); // the lock
+        Part(root, Cube, Plain(C("#3a2410"), .3f), new(0, .44f, -.312f), scale: new(.04f, .07f, .01f)); // its keyhole
+        return root;
+    }
+
     // a monument still to win, wrapped like a present: a draped tarp of `size` (standing on y = 0, centred), a red
     // ribbon crossing over it both ways and a big bow on top
     public static GameObject Wrapped(Vector3 size)

@@ -1,26 +1,29 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// Things that happen during a level, on top of the puzzle. None of them can make a level unsolvable: they only hold
-// something back for a while, or pay a bonus.
+// Things that happen during a level, on top of the puzzle. None of them can make a level unsolvable: they hold
+// something back for a while, pay a bonus, or (the pigeon) make an ordinary move the player can undo.
 //  - A hurried customer (levels 11-20 of each country): now and then wants one product; the matching products are
 //    circled, and their trio within the time pays coins and seconds.
 //  - One twist per country, from its 6th level:
-//    France, the pigeon: lands on a product, which can't be taken until the pigeon is shooed off with a tap;
+//    France, the pigeon: lands on a product, which can't be taken until the pigeon is shooed off with a tap (a few
+//    coins and a second); left there too long, it flies off with the product and drops it on another shelf;
 //    Italy, the siesta: a shelf pulls down its shutter for a few seconds (nothing taken from it or put on it);
 //    Japan, sealed bentos: one or two products only open after 3 moves;
 //    USA, the flash sale: one product is half price for a few seconds, and its trio pays a bonus.
 public partial class Game
 {
-    const float CustomerTime = 15, PigeonTime = 6, SiestaTime = 4, SaleTime = 8;
-    const int CustomerCoins = 10, SaleCoins = 10, BentoMoves = 3;
+    const float CustomerTime = 15, PigeonTime = 4, PigeonFlight = 1.1f, SiestaTime = 4, SaleTime = 8;
+    const int CustomerCoins = 10, SaleCoins = 10, BentoMoves = 3, PigeonCoins = 3;
 
     bool customers;
     int twist = -1; // the country whose twist runs in this level (-1: none)
     int customerId = -1, saleId = -1, shutS = -1;
-    float customerUntil, nextCustomer, saleUntil, nextSale, shutUntil, nextShut, pigeonUntil, nextPigeon;
+    float customerUntil, nextCustomer, saleUntil, nextSale, shutUntil, nextShut, pigeonUntil, nextPigeon, pigeonLandAt;
     (int s, int i) pigeon = (-1, -1);
+    Transform pigeon3D; // its model, standing on the product (rebuilt if Render clears the board)
     readonly Dictionary<(int s, int i), int> seals = new(); // sealed bentos: moves left before they open
 
     // called at the end of StartLevel
@@ -76,14 +79,16 @@ public partial class Game
         switch (twist)
         {
             case 0: // the pigeon lands on a front product, and flies off on its own after a while
-                if (pigeon.s >= 0 && (t > pigeonUntil || !LevelGen.IsProduct(shelves[pigeon.s][0][pigeon.i]))) ShooPigeon(false);
+                if (pigeon.s >= 0 && !LevelGen.IsProduct(shelves[pigeon.s][0][pigeon.i])) ShooPigeon(false);
+                else if (pigeon.s >= 0 && t > pigeonUntil) StealProduct();
                 else if (pigeon.s < 0 && t > nextPigeon)
                 {
                     var spots = FrontSlots().Where(c => LevelGen.Movable(shelves[c.s][0][c.i]) && !locked.Contains(c.s) && c != (dragS, dragI)).ToList();
                     if (spots.Count > 0)
                     {
                         pigeon = spots[rng.Next(spots.Count)];
-                        pigeonUntil = t + PigeonTime;
+                        pigeonLandAt = t;
+                        pigeonUntil = t + PigeonFlight + PigeonTime; // its stay counts from the landing
                         Fx.Play("drop", 1.6f);
                     }
                 }
@@ -125,17 +130,136 @@ public partial class Game
                 }
                 break;
         }
+        if (twist == 0) PlacePigeon();
     }
+
+    // the pigeon's model on top of its product, pecking now and then
+    void PlacePigeon()
+    {
+        if (pigeon.s < 0 || !views.TryGetValue(pigeon, out var view)) return;
+        if (!pigeon3D)
+        {
+            pigeon3D = Products.Pigeon().transform;
+            pigeon3D.SetParent(root);
+            pigeon3D.localScale = Vector3.one * .9f;
+        }
+        var b = view.GetComponentsInChildren<Renderer>().Select(r => r.bounds).Aggregate((a, c) => { a.Encapsulate(c); return a; });
+        var perch = new Vector3(b.center.x, b.max.y - .05f, b.center.z);
+        float flying = PigeonFlight - (Time.time - pigeonLandAt);
+        if (flying > 0) // still coming in: the way it leaves, played backwards
+        {
+            var side = FlightSide(perch);
+            pigeon3D.SetPositionAndRotation(Flight(perch, side, flying), Quaternion.LookRotation(Vector3.ProjectOnPlane(side - cam.transform.forward, Vector3.up))); // head (-z) the way it flies
+            pigeon3D.localScale = Vector3.one * .9f * (1 + flying);
+            Flap(pigeon3D);
+            return;
+        }
+        pigeon3D.localScale = Vector3.one * .9f;
+        pigeon3D.SetPositionAndRotation(perch, Quaternion.Euler(0, 25 + 30 * Mathf.Sin(Time.time * .7f), 0)); // three-quarter view, its head (-z) to the camera
+        var head = pigeon3D.Find("head");
+        if (head) head.localRotation = Quaternion.Euler(-35 * Mathf.Max(0, Mathf.Sin(Time.time * 7)), 0, 0); // pecking: beak (-z) down
+        if (pigeonUntil - Time.time < 1.5f) // about to take off with it: it flaps and hops, a warning
+        {
+            Flap(pigeon3D);
+            pigeon3D.position += Vector3.up * .08f * Mathf.Abs(Mathf.Sin(Time.time * 14));
+        }
+        else foreach (Transform part in pigeon3D)
+                if (part.name == "wing") part.localRotation = Quaternion.Euler(0, 0, Mathf.Sign(part.localPosition.x) * 12);
+    }
+
+    // shooed: it flies off along Flight until it leaves the screen, flapping, growing as it nears the lens
+    IEnumerator FlyAway(Transform bird)
+    {
+        var start = bird.position;
+        var side = FlightSide(start);
+        bird.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(cam.transform.forward - side, Vector3.up)); // its head (-z) towards the camera and the edge
+        var size = bird.localScale;
+        for (float t = 0; t < 2.5f && bird; t += Time.deltaTime)
+        {
+            bird.position = Flight(start, side, t);
+            bird.localScale = size * (1 + t);
+            Flap(bird);
+            var v = cam.WorldToViewportPoint(bird.position);
+            if (t > .3f && (v.x < -.15f || v.x > 1.15f || v.y > 1.15f)) break; // off screen
+            yield return null;
+        }
+        if (bird) Destroy(bird.gameObject);
+    }
+
+    // its flight path, t seconds from its perch: out towards the camera (clear of the shelves), then up and off to
+    // the side, faster and faster. Leaving it runs forwards, landing backwards.
+    Vector3 Flight(Vector3 perch, Vector3 side, float t) => perch - cam.transform.forward * Mathf.Min(t * 6, 2.5f) + (side * 5 + Vector3.up * 3) * t * t;
+    Vector3 FlightSide(Vector3 perch) => Mathf.Sign(perch.x - cam.transform.position.x + .01f) * cam.transform.right; // the nearest screen edge
 
     void ShooPigeon(bool tapped)
     {
+        int s = pigeon.s;
         pigeon = (-1, -1);
+        if (pigeon3D) StartCoroutine(FlyAway(pigeon3D));
+        pigeon3D = null;
         nextPigeon = Time.time + (tapped ? 7 : 10);
         if (tapped)
         {
-            Toast("Ouste !");
             Fx.Play("drop", 2f);
+            Reward(s, PigeonCoins, 1, $"Ouste ! +{PigeonCoins}");
         }
+    }
+
+    // left too long, the pigeon flies off with its product and drops it in an empty slot of another shelf: an
+    // ordinary move (undo takes it back, it doesn't count in the moves). No room anywhere: it just flies off.
+    void StealProduct()
+    {
+        var (s, i) = pigeon;
+        var spots = FrontSlots().Where(c => c.s != s && shelves[c.s][0][c.i] < 0 && !locked.Contains(c.s) && c.s != shutS).ToList();
+        if (spots.Count == 0 || locked.Contains(s) || !views.TryGetValue((s, i), out var view))
+        {
+            ShooPigeon(false);
+            return;
+        }
+        var (b, j) = spots[rng.Next(spots.Count)];
+        history.Push(Clone(shelves));
+        shelves[b][0][j] = shelves[s][0][i];
+        shelves[s][0][i] = -1;
+        views.Remove((s, i));
+        views[(b, j)] = view;
+        pigeon = (-1, -1);
+        nextPigeon = Time.time + 10;
+        Toast("Le pigeon l'a emporté !");
+        Fx.Play("back");
+        Fx.Haptic(2);
+        StartCoroutine(Carry(pigeon3D, view.transform, SlotPos(b, j)));
+        pigeon3D = null;
+        if (!busy) StartCoroutine(Resolve());
+    }
+
+    // the pigeon flaps over to the drop slot with the product hanging below it, lets go, and flies away
+    IEnumerator Carry(Transform bird, Transform product, Vector3 to)
+    {
+        var start = product.position;
+        for (float t = 0; t < .6f && product; t += Time.deltaTime)
+        {
+            float k = Mathf.SmoothStep(0, 1, t / .6f);
+            float arc = Mathf.Sin(Mathf.PI * k); // up and out towards the camera, clear of the shelves above
+            product.position = Vector3.Lerp(start, to, k) + (Vector3.up * .8f - cam.transform.forward * 1.5f) * arc;
+            if (bird)
+            {
+                bird.position = product.position + Vector3.up * .9f;
+                Flap(bird);
+            }
+            yield return null;
+        }
+        if (product)
+        {
+            product.position = to;
+            StartCoroutine(Fx.Squash(product));
+        }
+        if (bird) StartCoroutine(FlyAway(bird));
+    }
+
+    static void Flap(Transform bird)
+    {
+        foreach (Transform part in bird)
+            if (part.name == "wing") part.localRotation = Quaternion.Euler(0, 0, Mathf.Sign(part.localPosition.x) * (12 + 60 * Mathf.Sin(Time.time * 40)));
     }
 
     // a tap on a product the twists hold back: says why (or shoos the pigeon), and takes nothing
@@ -242,25 +366,6 @@ public partial class Game
             Label(new Rect(r.x, r.center.y - 50, r.width, 60), "RIPOSO", 44, Ink);
             Label(new Rect(r.x, r.center.y + 4, r.width, 50), $"{Mathf.CeilToInt(shutUntil - Time.time)} s", 36, Ink);
         }
-        // the pigeon on its product, bobbing its head
-        if (pigeon.s >= 0)
-        {
-            var p = ToGui(SlotAim(pigeon.s, pigeon.i)) + new Vector2(0, -90);
-            float bob = 6 * Mathf.Sin(Time.time * 10);
-            Disc(p.x, p.y + 20, 46, new Color(.55f, .58f, .65f)); // body
-            Disc(p.x + 18, p.y + 26, 28, new Color(.42f, .45f, .52f)); // wing
-            Disc(p.x - 34, p.y - 12 + bob, 24, new Color(.48f, .52f, .6f)); // head
-            Disc(p.x - 40, p.y - 16 + bob, 6, Color.black); // eye
-            Fill(new Rect(p.x - 66, p.y - 10 + bob, 14, 8), new Color(.95f, .6f, .2f)); // beak
-            Disc(p.x - 26, p.y + 2 + bob, 10, new Color(.4f, .7f, .55f)); // the green sheen on its neck
-        }
-    }
-
-    void Disc(float cx, float cy, float r, Color c)
-    {
-        GUI.color = c;
-        GUI.DrawTexture(new Rect(cx - r, cy - r, 2 * r, 2 * r), circle);
-        GUI.color = Color.white;
     }
 
     // in the sign's place while a customer waits: who, what to do, the time left

@@ -22,6 +22,7 @@ public partial class Game
     Vector2 lastPress;
     Transform mapRoot, truck3D;
     readonly List<Transform> pads = new();
+    readonly List<(Transform t, int l)> chests3D = new(); // chests still to open, beside their shops (Chest.cs)
     Transform landmark3D; // the monument on the plaza, wrapped until the country is finished
     Vector3 landmarkScale;
     float revealAt = -10; // when the monument was just unveiled: it pops up, a banner shows the reward
@@ -120,6 +121,7 @@ public partial class Game
         mapRoot = new GameObject("Map").transform;
         mapRoot.SetParent(root);
         pads.Clear();
+        chests3D.Clear();
         truck3D = null;
         truckWorld = -1;
         int w = mapWorld;
@@ -165,6 +167,15 @@ public partial class Game
                 var glow = ring.GetComponent<Renderer>().material;
                 glow.EnableKeyword("_EMISSION");
                 glow.SetColor("_EmissionColor", Gold * .8f);
+            }
+            if (HasChest(l) && !ChestOpened(w, l)) // a chest on the pavement beside the shop: grey until the level is won
+            {
+                var chest = Products.Chest(Done(w, l)).transform;
+                chest.SetParent(mapRoot);
+                var toRoad = (MapPos(g) - PadPos(g)).normalized; // on the pavement between the road and the shop, by its driveway
+                chest.SetPositionAndRotation(PadPos(g) + toRoad * .95f + new Vector3(0, .02f, .55f), Quaternion.Euler(0, toRoad.x > 0 ? -20 : 20, 0));
+                chest.localScale = Vector3.one * .5f;
+                chests3D.Add((chest, l));
             }
             pads.Add(pad);
         }
@@ -212,14 +223,20 @@ public partial class Game
         var placed = new List<(Vector2 c, float r)>();
         float airZ = MapPos(StartT).z;
         float RoadX(float z) => MapPos((z - MapO.z) / NodeGap).x;
-        bool Clear(Vector2 c, float r)
+        bool Clear(Vector2 c, float r, float h)
         {
             if (c.y - r < airZ + .7f && c.y + r > airZ - 3.9f) return false; // the airport's band
             if (c.y + r > airZ && c.y - r < plaza.z)
                 for (float dz = -r; dz <= r; dz += r)
                     if (Mathf.Abs(c.x - RoadX(c.y + dz)) < 1.4f + r) return false;
             foreach (var pad in pads)
-                if (Vector2.Distance(c, new Vector2(pad.position.x, pad.position.z)) < 1.1f + r) return false;
+            {
+                var s = new Vector2(pad.position.x, pad.position.z);
+                if (Vector2.Distance(c, s) < 1.1f + r) return false;
+                // the camera looks up the map at MapTilt: something tall in front of a shop hides it (its top lands on
+                // the screen where the ground h / tan(MapTilt) further back does), with its sign and stars
+                if (Mathf.Abs(c.x - s.x) < 1f + r && s.y > c.y && s.y - c.y < h / Mathf.Tan(MapTilt * Mathf.Deg2Rad) + 1f) return false;
+            }
             if (w == 0 && c.x - r < RoadX(c.y) - 4.4f + 1.1f) return false; // the Seine and its quay
             if (Vector2.Distance(c, new Vector2(plaza.x, plaza.z)) < PlazaR + .15f + r) return false;
             if (Vector2.Distance(c, new Vector2(MapPos(GateT).x, MapPos(GateT).z)) < 1.6f + r) return false;
@@ -237,7 +254,7 @@ public partial class Game
             foreach (var rr in rs) b.Encapsulate(rr.bounds);
             var c = new Vector2(b.center.x, b.center.z);
             float r = Mathf.Max(b.extents.x, b.extents.z);
-            if (Clear(c, r)) placed.Add((c, r));
+            if (Clear(c, r, b.max.y)) placed.Add((c, r));
             else Destroy(d.gameObject);
         }
 
@@ -291,7 +308,7 @@ public partial class Game
             wheelSpin += Mathf.Abs(truckT - before) * NodeGap / (2 * Mathf.PI * .2f) * 360; // roll without sliding
             var ahead = (TruckPos(truckT + .05f * dir) - TruckPos(truckT)).normalized;
             truckYaw = Mathf.LerpAngle(truckYaw, Mathf.Atan2(-ahead.z, ahead.x) * Mathf.Rad2Deg, 10 * dt);
-            scrollZ = Mathf.Lerp(scrollZ, CenterZ(truckT), 6 * dt);
+            if (chestAt <= 0) scrollZ = Mathf.Lerp(scrollZ, CenterZ(truckT), 6 * dt); // the camera stays on a chest being opened
             if (truckT == truckGoal)
             {
                 Fx.Play("drop");
@@ -340,6 +357,12 @@ public partial class Game
         if (landmark3D && landmark3D.gameObject.activeSelf)
             landmark3D.localScale = landmarkScale * (Time.time - revealAt < 2 ? PopIn(revealAt + .4f) : 1);
 
+        // chests ready to open hop on the spot
+        foreach (var (chest, l) in chests3D)
+            if (Done(mapWorld, l) && !(chestAt > 0 && l == chestLvl)) chest.position = new Vector3(chest.position.x, .02f + .12f * Mathf.Abs(Mathf.Sin(Time.time * 4 + l)), chest.position.z);
+
+        if (chestAt > 0) UpdateChest();
+
         // the next level to play breathes
         for (int i = 0; i < pads.Count; i++)
         {
@@ -380,10 +403,17 @@ public partial class Game
     {
         var p = new Vector2(screen.x / GuiScale, (Screen.height - screen.y) / GuiScale);
         if (chestAt > 0) return; // the chest card is up
-        for (int g = (int)First; g <= Last; g++) // a tap on a chest beside a sign is the chest's (MapChest), not the shop's
+        foreach (var (chest, l) in chests3D) // a tap on a chest is the chest's, not its shop's
         {
-            var sign = ToGui(PadPos(g) + new Vector3(0, Products.SignY(mapWorld), -.48f));
-            if (HasChest(g % LevelsPerWorld) && Vector2.Distance(p, sign + new Vector2(143, -28)) < 80) return;
+            if (Vector2.Distance(p, ToGui(chest.position + new Vector3(0, .25f, 0))) > 90) continue;
+            if (!Done(mapWorld, l))
+            {
+                Fx.Play("back");
+                return;
+            }
+            ShowChest(l);
+            Fx.Play("pick");
+            return;
         }
         if (p.y < SafeTopPx() + 150 || p.y > Screen.height / GuiScale - SafeBottomPx() - 230) return; // header and the bottom button
         for (int g = (int)First; g <= Last; g++)
@@ -483,7 +513,6 @@ public partial class Game
                 var tag = new Rect(c.x - 50, c.y - 82, 100, 44);
                 Panel(tag, Ink);
                 Label(tag, "DUR", 28, Color.white);
-                if (HasChest(l) && !ChestOpened(mapWorld, l)) MapChest(new Rect(c.x + 95, c.y - 70, 96, 84), l); // a chest to win here
             }
             if (!Done(mapWorld, l)) continue;
             var front = ToGui(PadPos(g) + new Vector3(0, 0, -.8f)); // the pavement's front edge
