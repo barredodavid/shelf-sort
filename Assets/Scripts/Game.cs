@@ -437,6 +437,7 @@ public partial class Game : MonoBehaviour
         UpdateWorld();
         TickStars();
         AnimateStage();
+        TrophyIcons();
         if (started && !over && !Paused) UpdateEvents();
         if (started && !busy && !over && !Paused)
         {

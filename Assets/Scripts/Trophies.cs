@@ -1,3 +1,4 @@
+using System.Linq;
 using UnityEngine;
 
 // Trophies: long-run goals, each with three tiers (bronze, silver, gold) paying coins. Some count events (Count:
@@ -59,7 +60,7 @@ public partial class Game
     }
 
     string trophyMsg;
-    int trophyTier;
+    int trophyTier, trophyIndex;
     float trophyAt = -10;
 
     // any tier newly reached pays its coins and puts up the banner
@@ -74,6 +75,7 @@ public partial class Game
             PlayerPrefs.SetInt("coins", coins);
             PlayerPrefs.SetInt("trophy_" + TrophyList[t].key, now);
             trophyMsg = TrophyList[t].name;
+            trophyIndex = t;
             trophyTier = now - 1;
             trophyAt = Time.time;
             Fx.Play("win", 1.2f);
@@ -90,58 +92,157 @@ public partial class Game
         var r = new Rect(60, top - 260 + 300 * slide, W - 120, 170);
         Panel(new Rect(r.x, r.y + 12, r.width, r.height), Darker(Ink));
         Panel(r, Ink);
-        Medal(new Rect(r.x + 30, r.y + 25, 120, 120), trophyTier);
+        Medal(new Rect(r.x + 30, r.y + 25, 120, 120), trophyTier, trophyIndex);
         Label(new Rect(r.x + 180, r.y + 18, r.width - 200, 60), $"TROPHÉE {TierNames[trophyTier].ToUpper()} !", 40, TierColors[trophyTier], false, TextAnchor.MiddleLeft);
         Label(new Rect(r.x + 180, r.y + 78, r.width - 200, 70), $"{trophyMsg}  +{TierCoins[trophyTier]} pièces", 36, Color.white, false, TextAnchor.MiddleLeft);
     }
 
-    // a round medal in its tier's colour with a star on it (tier -1: not won yet, grey)
-    void Medal(Rect r, int tier)
+    // a medal: a rim in its tier's colour round a pale disc, trophy t's picture on it (tier -1: not won yet, greyed)
+    void Medal(Rect r, int tier, int t = -1)
     {
-        var c = tier < 0 ? new Color(.78f, .8f, .84f) : TierColors[tier];
+        var c = tier < 0 ? new Color(.74f, .76f, .8f) : TierColors[tier];
         GUI.color = Darker(c);
-        GUI.DrawTexture(new Rect(r.x, r.y + 6, r.width, r.height), circle);
+        GUI.DrawTexture(new Rect(r.x, r.y + r.height * .05f, r.width, r.height), circle);
         GUI.color = c;
         GUI.DrawTexture(r, circle);
-        GUI.color = Color.white;
-        star ??= Fx.Star(128);
-        GUI.color = tier < 0 ? new Color(1, 1, 1, .6f) : Color.white;
-        GUI.DrawTexture(new Rect(r.x + r.width * .2f, r.y + r.height * .18f, r.width * .6f, r.height * .6f), star);
+        GUI.color = Color.Lerp(c, Color.white, .6f);
+        float inset = r.width * .1f;
+        GUI.DrawTexture(new Rect(r.x + inset, r.y + inset, r.width - 2 * inset, r.height - 2 * inset), circle);
+        var tint = tier < 0 ? new Color(.55f, .57f, .62f, .7f) : Color.white;
+        var pic = new Rect(r.x + inset * .7f, r.y + inset * .7f, r.width - inset * 1.4f, r.height - inset * 1.4f);
+        string key = t >= 0 ? TrophyList[t].key : "";
+        var icon = t >= 0 && trophyIcons.TryGetValue(key, out var ic) ? ic : null;
+        GUI.color = tint;
+        if (icon) GUI.DrawTexture(pic, icon);
+        else if (key == "combo") Label(pic, "x" + TrophyList[t].tiers[Mathf.Max(0, tier)], (int)(r.width * .34f), tier < 0 ? tint : Red, true);
+        else if (key == "streak") // a little calendar page
+        {
+            var page = new Rect(pic.x + pic.width * .2f, pic.y + pic.height * .2f, pic.width * .6f, pic.height * .6f);
+            Fill(page, Color.white * tint);
+            Fill(new Rect(page.x, page.y, page.width, page.height * .28f), Red * tint);
+            Label(new Rect(page.x, page.y + page.height * .25f, page.width, page.height * .75f), TrophyList[t].tiers[Mathf.Max(0, tier)].ToString(), (int)(r.width * .26f), Ink * tint);
+        }
+        else // a star (the three-star trophy, and the tier medals)
+        {
+            star ??= Fx.Star(128);
+            GUI.color = tier < 0 ? tint : Gold;
+            GUI.DrawTexture(new Rect(pic.x + pic.width * .15f, pic.y + pic.height * .12f, pic.width * .7f, pic.height * .7f), star);
+        }
         GUI.color = Color.white;
     }
 
-    // the trophy screen: each one with its medal, what to do next, a progress bar and the three tiers' marks
+    // a rounded bar: two round caps and the band between them
+    void Pill(Rect r, Color c)
+    {
+        GUI.color = c;
+        GUI.DrawTexture(new Rect(r.x, r.y, r.height, r.height), circle);
+        GUI.DrawTexture(new Rect(r.xMax - r.height, r.y, r.height, r.height), circle);
+        GUI.color = Color.white;
+        if (r.width > r.height) Fill(new Rect(r.x + r.height / 2, r.y, r.width - r.height, r.height), c);
+    }
+
+    // each trophy's picture, rendered once from the game's own 3D models into a texture with a clear background;
+    // called by Update when the trophy screen or the banner needs them (not from OnGUI, which mustn't render cameras)
+    static readonly System.Collections.Generic.Dictionary<string, RenderTexture> trophyIcons = new();
+    Camera iconCam;
+    void TrophyIcons()
+    {
+        if (menu != Menu.Trophies && Time.time - trophyAt > 3.2f) return;
+        for (int t = 0; t < TrophyList.Length; t++) TrophyIcon(t);
+    }
+
+    void TrophyIcon(int t)
+    {
+        string key = TrophyList[t].key;
+        if (trophyIcons.TryGetValue(key, out var have) && have) return;
+        GameObject model = key switch
+        {
+            "pigeons" => Products.Pigeon(),
+            "siesta" => Products.Shutter(1.6f, 1.2f),
+            "bento" => Products.BentoWrap(),
+            "promo" => Products.SaleTag(),
+            "albums" => Products.Chest(true),
+            "world" => Products.Globe(.8f),
+            "trios" or "golden" => new GameObject("Trio"),
+            _ => null,
+        };
+        if (!model) return;
+        model.transform.position = StageO + new Vector3(0, 50, 0);
+        if (key is "trios" or "golden") // three of the same product side by side (gilded for the gold digger)
+            for (int i = -1; i <= 1; i++)
+            {
+                var p = Item(0, model.transform.position + new Vector3(i * 1.05f, 0, i == 0 ? -.2f : 0), 1, false, "icon");
+                p.transform.SetParent(model.transform, true);
+                if (key == "golden")
+                    foreach (var r in p.GetComponentsInChildren<Renderer>()) r.sharedMaterials = r.sharedMaterials.Select(Goldify).ToArray();
+            }
+        if (key == "world") model.transform.rotation = Quaternion.Euler(-20, 160, 0);
+        if (key is "pigeons" or "albums") model.transform.rotation = Quaternion.Euler(0, 30, 0);
+        if (key == "siesta") // half down
+        {
+            model.transform.Find("curtain").localScale = new Vector3(1, .7f, 1);
+            model.transform.Find("bar").localPosition = new Vector3(0, -.7f, 0);
+        }
+        trophyIcons[key] = Snapshot(model);
+    }
+
+    // a picture of a model (already placed out of sight), framed on its bounds, seen a little from above, on a clear
+    // background; the model is destroyed
+    RenderTexture Snapshot(GameObject model, int size = 256)
+    {
+        var rs = model.GetComponentsInChildren<Renderer>();
+        var b = rs[0].bounds;
+        foreach (var r in rs) b.Encapsulate(r.bounds);
+        if (!iconCam)
+        {
+            iconCam = new GameObject("IconCam").AddComponent<Camera>();
+            iconCam.orthographic = true;
+            iconCam.clearFlags = CameraClearFlags.SolidColor;
+            iconCam.backgroundColor = new Color(0, 0, 0, 0);
+            iconCam.enabled = false; // renders on demand
+        }
+        var tex = new RenderTexture(size, size, 24, RenderTextureFormat.ARGB32) { antiAliasing = 4 };
+        iconCam.targetTexture = tex;
+        iconCam.orthographicSize = Mathf.Max(b.extents.x, b.extents.y) * 1.1f;
+        iconCam.transform.SetPositionAndRotation(b.center + Quaternion.Euler(12, 0, 0) * new Vector3(0, 0, -10), Quaternion.Euler(12, 0, 0));
+        iconCam.Render();
+        model.SetActive(false);
+        Destroy(model);
+        return tex;
+    }
+
+    // the trophy screen: each one on its card, its medal, what to do next, a rounded gauge and the three tiers as
+    // little medals; a finished one's card turns gold
     void TrophyScreen(float W, float H, float safeTop)
     {
         Panel(new Rect(-100, -100, W + 200, H + 200), Cream);
         float y = safeTop + 40;
         if (Button(new Rect(40, y, 250, 96), "Retour", Mist, 40)) OpenMenu(Menu.Home);
-        Label(new Rect(300, y, W - 340, 96), "TROPHÉES", 64, Red, true);
-        float row = Mathf.Min(150, (H - y - 180) / TrophyList.Length);
+        int won = 0;
+        for (int t = 0; t < TrophyList.Length; t++) won += TierOf(t);
+        Label(new Rect(300, y - 8, W - 340, 72), "TROPHÉES", 60, Red, true);
+        Label(new Rect(300, y + 58, W - 340, 40), $"{won} / {TrophyList.Length * 3} médailles", 30, new Color(.4f, .45f, .55f));
+        float row = Mathf.Min(170, (H - y - 170) / TrophyList.Length);
         for (int t = 0; t < TrophyList.Length; t++)
         {
             var (_, name, goal, tiers, value) = TrophyList[t];
             int tier = TierOf(t), v = value();
-            var card = new Rect(40, y + 130 + t * row, W - 80, row - 14);
-            Panel(card, Color.white);
-            float m = card.height - 24;
-            Medal(new Rect(card.x + 16, card.y + 12, m, m), tier - 1);
-            float x = card.x + 32 + m;
-            Label(new Rect(x, card.y + 4, card.width - m - 300, card.height * .45f), name, 38, Ink, false, TextAnchor.MiddleLeft);
-            string what = tier == 3 ? "Terminé !" : string.Format(goal, tiers[tier]);
-            Label(new Rect(x, card.y + card.height * .42f, card.width - m - 300, card.height * .3f), what, 28, new Color(.4f, .45f, .55f), false, TextAnchor.MiddleLeft);
-            // progress towards the next tier, the tiers already won as little dots
-            var bar = new Rect(card.xMax - 260, card.y + card.height / 2 - 14, 220, 28);
-            Fill(bar, new Color(0, 0, 0, .08f));
-            float to = tiers[Mathf.Min(tier, 2)];
-            Fill(new Rect(bar.x, bar.y, bar.width * Mathf.Clamp01(v / to), bar.height), tier == 3 ? TierColors[2] : Gold);
-            Label(new Rect(bar.x, bar.y - 44, bar.width, 40), tier == 3 ? $"{v}" : $"{Mathf.Min(v, (int)to)} / {to}", 26, Ink);
+            var card = new Rect(40, y + 140 + t * row, W - 80, row - 16);
+            Panel(new Rect(card.x, card.y + 8, card.width, card.height), new Color(0, 0, 0, .06f));
+            Panel(card, tier == 3 ? new Color(1f, .94f, .74f) : Color.white);
+            float m = card.height + 10;
+            Medal(new Rect(card.x + 6, card.y - 5, m, m), tier - 1, t);
+            float x = card.x + 28 + m;
+            Label(new Rect(x, card.y + 6, card.width - m - 330, card.height * .48f), name, 40, Ink, false, TextAnchor.MiddleLeft);
+            string what = tier == 3 ? "Trophée complet !" : string.Format(goal, tiers[tier]);
+            Label(new Rect(x, card.y + card.height * .5f, card.width - m - 330, card.height * .36f), what, 28, new Color(.42f, .46f, .56f), false, TextAnchor.MiddleLeft);
+            float to = tiers[Mathf.Min(tier, 2)], fill = tier == 3 ? 1 : Mathf.Clamp01(v / to);
+            var bar = new Rect(card.xMax - 300, card.y + card.height * .16f, 270, 42);
+            Pill(bar, new Color(.91f, .91f, .89f)); // opaque: the caps overlap the band
+            if (fill > 0) Pill(new Rect(bar.x, bar.y, Mathf.Max(bar.height, bar.width * fill), bar.height), tier == 3 ? TierColors[2] : Gold);
+            Label(bar, tier == 3 ? $"{v}" : $"{Mathf.Min(v, (int)to)} / {to}", 26, Ink);
             for (int k = 0; k < 3; k++)
-            {
-                GUI.color = k < tier ? TierColors[k] : new Color(0, 0, 0, .12f);
-                GUI.DrawTexture(new Rect(bar.x + 70 * k + 50, bar.yMax + 8, 26, 26), circle);
-            }
-            GUI.color = Color.white;
+                Medal(new Rect(bar.x + 45 + 66 * k, bar.yMax + 10, 46, 46), k < tier ? k : -1);
         }
     }
 }

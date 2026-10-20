@@ -61,7 +61,11 @@ public partial class Game
             catalogWorld = world;
             OpenMenu(Menu.Catalog); // the sticker album
         }
-        if (Button(new Rect(W / 2 - 160, y + 116, 320, 80), "Trophées", Mist, 34)) OpenMenu(Menu.Trophies);
+        if (Button(new Rect(W / 2 - 160, y + 116, 320, 80), "Trophées", Mist, 34))
+        {
+            CheckTrophies(); // progress made before trophies existed counts too
+            OpenMenu(Menu.Trophies);
+        }
 
         // logo, tilted like a hand-painted shop sign: drops in with a bounce, then bobs gently
         float ly = y + 215 + 8 * Mathf.Sin(Time.time * 2); // below the second row of buttons (Collection, Défi du jour)

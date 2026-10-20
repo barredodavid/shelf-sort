@@ -16,6 +16,7 @@ public partial class Game
 
     Transform globe, plane3D;
     Transform[] route; // the flight's dotted trail on the globe
+    readonly RenderTexture[] landmarkIcons = new RenderTexture[Places.Length]; // each country card's monument
     readonly Transform[] pins = new Transform[Places.Length];
     float flyAt = -1;
     int flyFrom, flyTo;
@@ -100,6 +101,13 @@ public partial class Game
     void UpdateWorld()
     {
         if (menu != Menu.World || !globe) return;
+        for (int w = 0; w < Worlds.Length; w++) // the cards' monument pictures, taken once
+            if (!landmarkIcons[w])
+            {
+                var model = Products.Landmark(w);
+                model.transform.SetPositionAndRotation(StageO + new Vector3(40 * w, 80, 0), Quaternion.Euler(0, w == 1 ? 0 : 20, 0));
+                landmarkIcons[w] = Snapshot(model);
+            }
         if (camFlags == 0) (camFlags, camBg) = (cam.clearFlags, cam.backgroundColor); // restored when the globe closes
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(.05f, .07f, .16f);
@@ -196,13 +204,23 @@ public partial class Game
                         Fx.Play("pick");
                     }
                 }
-                Label(new Rect(r.x, r.y + 10, r.width, 75), Worlds[w].name.ToUpper(), 42, Color.white, true);
-                Star(new Rect(r.x + 120, r.y + 92, 44, 44), true);
-                Label(new Rect(r.x + 170, r.y + 84, r.width - 190, 60),
-                    open ? $"{WorldStars(w)} / {LevelsPerWorld * 3}" : $"{Worlds[w].need} pour ouvrir", 30, Color.white, false, TextAnchor.MiddleLeft);
+                // its flag, its name and stars, its monument standing out of the card's top right corner
+                var flag = new Rect(r.x + 26, r.y + 30, 96, 64);
+                Fill(new Rect(flag.x - 5, flag.y - 5, flag.width + 10, flag.height + 10), Color.white);
+                Flag(flag, w);
+                Label(new Rect(r.x + 140, r.y + 14, r.width - 290, 70), Worlds[w].name.ToUpper(), Worlds[w].name.Length > 7 ? 32 : 40, Color.white, true, TextAnchor.MiddleLeft);
+                Star(new Rect(r.x + 140, r.y + 92, 40, 40), true);
+                Label(new Rect(r.x + 186, r.y + 84, r.width - 330, 56),
+                    open ? $"{WorldStars(w)} / {LevelsPerWorld * 3}" : $"{Worlds[w].need} pour ouvrir", 28, Color.white, false, TextAnchor.MiddleLeft);
+                if (landmarkIcons[w])
+                {
+                    GUI.color = open ? Color.white : new Color(.6f, .62f, .68f, .8f);
+                    GUI.DrawTexture(new Rect(r.xMax - 180, r.y - 55, 190, 190), landmarkIcons[w]);
+                    GUI.color = Color.white;
+                }
                 if (w == mapWorld)
                 {
-                    var here = new Rect(r.xMax - 120, r.y - 26, 130, 56);
+                    var here = new Rect(r.x + 10, r.y - 30, 130, 56); // top left: the monument has the right
                     Panel(here, Cream);
                     Label(here, "ICI", 30, Ink);
                 }
@@ -229,5 +247,32 @@ public partial class Game
         if (camFlags == 0) return;
         cam.clearFlags = camFlags;
         cam.backgroundColor = camBg;
+    }
+
+    // country w's flag, flat in r: the French and Italian tricolours, the Japanese red sun, the Stars and Stripes
+    void Flag(Rect r, int w)
+    {
+        static Color C(string hex) => ColorUtility.TryParseHtmlString(hex, out var c) ? c : Color.magenta;
+        if (w <= 1)
+        {
+            string[] bands = w == 0 ? new[] { "#0055a4", "#ffffff", "#ef4135" } : new[] { "#009246", "#ffffff", "#ce2b37" };
+            for (int k = 0; k < 3; k++) Fill(new Rect(r.x + k * r.width / 3, r.y, r.width / 3 + 1, r.height), C(bands[k]));
+        }
+        else if (w == 2)
+        {
+            Fill(r, Color.white);
+            GUI.color = C("#bc002d");
+            float d = r.height * .6f;
+            GUI.DrawTexture(new Rect(r.center.x - d / 2, r.center.y - d / 2, d, d), circle);
+            GUI.color = Color.white;
+        }
+        else
+        {
+            for (int k = 0; k < 7; k++) Fill(new Rect(r.x, r.y + k * r.height / 7, r.width, r.height / 7 + 1), k % 2 == 0 ? C("#b22234") : Color.white);
+            var canton = new Rect(r.x, r.y, r.width * .42f, r.height * 4 / 7);
+            Fill(canton, C("#3c3b6e"));
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 3; j++) Fill(new Rect(canton.x + 5 + i * 9, canton.y + 5 + j * 11, 4, 4), Color.white);
+        }
     }
 }
