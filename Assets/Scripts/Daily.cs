@@ -19,7 +19,7 @@ public partial class Game
     // the streak still counts while yesterday's challenge was won
     static int Streak => PlayerPrefs.GetInt("dailyDone", -1) >= Today - 1 ? PlayerPrefs.GetInt("streak", 0) : 0;
 
-    string LevelTitle => daily ? "DÉFI DU JOUR" : $"NIVEAU {LevelName}";
+    string LevelTitle => daily ? T("DÉFI DU JOUR") : Tf("NIVEAU {0}", LevelName);
 
     void PlayDaily()
     {
@@ -73,7 +73,7 @@ public partial class Game
         coins += gained;
         PlayerPrefs.SetInt("coins", coins);
         PlayerPrefs.Save();
-        unlockedMsg = streak > 1 ? $"Série : {streak} jours de suite !" : "Reviens demain pour une série !";
+        unlockedMsg = streak > 1 ? Tf("Série : {0} jours de suite !", streak) : "Reviens demain pour une série !";
         stickerMsg = GiveSticker(world); // the challenge's country
         CheckTrophies(); // the streak
     }

@@ -28,13 +28,13 @@ public partial class Game
         if (missing.Count == 0) return null;
         int id = missing[Random.Range(0, missing.Count)];
         PlayerPrefs.SetInt($"sticker{w}_{id}", 1);
-        string msg = $"Nouvel autocollant : {ProductNames[w][id]} !";
+        string msg = Tf("Nouvel autocollant : {0} !", T(ProductNames[w][id]));
         if (missing.Count == 1 && PlayerPrefs.GetInt($"album{w}", 0) == 0) // that was the last one
         {
             PlayerPrefs.SetInt($"album{w}", 1);
             coins += AlbumCoins;
             PlayerPrefs.SetInt("coins", coins);
-            msg = $"Album {Worlds[w].name} complet ! +{AlbumCoins} pièces";
+            msg = Tf("Album {0} complet ! +{1} pièces", Name(w), AlbumCoins);
         }
         PlayerPrefs.Save();
         CheckTrophies(); // a full album

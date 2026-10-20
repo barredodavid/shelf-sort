@@ -492,8 +492,8 @@ public partial class Game
 
         // country name on the gate's board
         var board = ToGui(new Vector3(MapPos(GateT).x, 2.05f, MapPos(GateT).z));
-        Label(new Rect(board.x - 200, board.y - 62, 400, 50), $"PAYS {mapWorld + 1}", 34, Color.white, true);
-        Label(new Rect(board.x - 200, board.y - 18, 400, 70), Worlds[mapWorld].name.ToUpper(), 52, Color.white, true);
+        Label(new Rect(board.x - 200, board.y - 62, 400, 50), Tf("PAYS {0}", mapWorld + 1), 34, Color.white, true);
+        Label(new Rect(board.x - 200, board.y - 18, 400, 70), Name(mapWorld).ToUpper(), 52, Color.white, true);
 
         // a plaque at the plaza's front: the monument's name once the country is finished, until then what unveils it
         var plaque = ToGui(MapPos(PlazaT) + new Vector3(0, 0, -PlazaR + .3f));
@@ -507,7 +507,7 @@ public partial class Game
             else
             {
                 Label(new Rect(sign.x, sign.y + 8, sign.width, 60), "À DÉBLOQUER", 44, Gold);
-                Label(new Rect(sign.x, sign.y + 64, sign.width, 44), $"Finis les {LevelsPerWorld} niveaux", 30, Color.white);
+                Label(new Rect(sign.x, sign.y + 64, sign.width, 44), Tf("Finis les {0} niveaux", LevelsPerWorld), 30, Color.white);
             }
         }
 
@@ -520,7 +520,7 @@ public partial class Game
             Panel(new Rect(banner.x, banner.y + 14, banner.width, banner.height), Darker(Gold));
             Panel(banner, Gold);
             Label(new Rect(banner.x, banner.y + 18, banner.width, 90), "PAYS TERMINÉ !", 70, Red, true);
-            Label(new Rect(banner.x, banner.y + 112, banner.width, 60), $"+{RevealCoins} pièces", 46, Ink);
+            Label(new Rect(banner.x, banner.y + 112, banner.width, 60), Tf("+{0} pièces", RevealCoins), 46, Ink);
             GUI.matrix = keep;
         }
 
@@ -568,13 +568,13 @@ public partial class Game
             Panel(new Rect(tag.x, tag.y + 8, tag.width, tag.height), Darker(Gold));
             Panel(tag, Gold);
             Label(tag, "À TOI !", 36, Ink);
-            if (Button(play, $"JOUER  {mapWorld + 1}-{nextLevel % LevelsPerWorld + 1}", Gold, 60))
+            if (Button(play, Tf("JOUER  {0}-{1}", mapWorld + 1, nextLevel % LevelsPerWorld + 1), Gold, 60))
             {
                 Fx.Play("pick");
                 DriveTo(nextLevel, true);
             }
         }
-        else if (!LastCountry && Button(play, $"VERS {Worlds[mapWorld + 1].name.ToUpper()}", Gold, 56)) TakeOff();
+        else if (!LastCountry && Button(play, Tf("VERS {0}", Name(mapWorld + 1).ToUpper()), Gold, 56)) TakeOff();
         GUI.enabled = true;
 
         // header: back, the world map, star count

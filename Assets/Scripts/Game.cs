@@ -587,7 +587,7 @@ public partial class Game : MonoBehaviour
             if (combo > 1) // praise growing with the chain, and the 2 seconds won flying to the clock
             {
                 time = Mathf.Min(total, time + 2);
-                Toast(combo == 2 ? "SUPER ! x2" : combo == 3 ? "GÉNIAL ! x3" : $"INCROYABLE ! x{combo}");
+                Toast(combo == 2 ? "SUPER ! x2" : combo == 3 ? "GÉNIAL ! x3" : Tf("INCROYABLE ! x{0}", combo));
                 StartCoroutine(Fx.Shake(cam.transform, CamHome, .08f + .04f * combo));
                 Fly(ShelfPos(hits[0]) + new Vector3(0, .7f, 0), clockTarget, "+2 s", .15f);
             }
@@ -600,7 +600,7 @@ public partial class Game : MonoBehaviour
                 PlayerPrefs.Save();
                 Fx.Play("match", 1.9f);
                 Fx.Haptic(3);
-                Toast($"+{GoldPay} PIÈCES !");
+                Toast(Tf("+{0} PIÈCES !", GoldPay));
                 for (int c = 0; c < 6; c++) Fly(ShelfPos(s) + new Vector3((c - 2.5f) * .25f, .7f, 0), coinTarget, null, .1f + c * .06f);
             }
 
@@ -729,6 +729,7 @@ public partial class Game : MonoBehaviour
 
     void Label(Rect r, string s, int size, Color c, bool shadow = false, TextAnchor align = TextAnchor.MiddleCenter)
     {
+        s = T(s); // every text on screen goes through the translation (Lang.cs)
         text.fontSize = size;
         text.alignment = align;
         if (shadow)
@@ -787,7 +788,7 @@ public partial class Game : MonoBehaviour
 
         // top bar: level (red on HARD levels), coins, pause
         Panel(new Rect(40, top, 420, 110), hard ? Red : Cream);
-        Label(new Rect(40, top, 420, 110), hard && !daily ? $"NIVEAU {LevelName} · HARD" : LevelTitle, hard || daily ? 42 : 52, hard ? Color.white : Ink);
+        Label(new Rect(40, top, 420, 110), hard && !daily ? Tf("NIVEAU {0} · HARD", LevelName) : LevelTitle, hard || daily ? 42 : 52, hard ? Color.white : Ink);
         CoinsPill(500, top);
         coinTarget = new Vector2(555, top + 48); // the purse's coin
         GUI.enabled = live;
@@ -816,7 +817,7 @@ public partial class Game : MonoBehaviour
         Label(new Rect(bar.x + 30, bar.y, bar.width / 2, bar.height), $"{Mathf.CeilToInt(time)} s", 40, Color.white, true, TextAnchor.MiddleLeft);
         clockTarget = new Vector2(bar.x + 90, bar.center.y);
         // moves against the target for the moves star; turns red once over it
-        Label(new Rect(bar.center.x, bar.y, bar.width / 2 - 30, bar.height), $"{moves} / {par} coups", 40,
+        Label(new Rect(bar.center.x, bar.y, bar.width / 2 - 30, bar.height), Tf("{0} / {1} coups", moves, par), 40,
             moves > par ? new Color(1f, .75f, .75f) : Color.white, true, TextAnchor.MiddleRight);
 
         var boardTop = cam.WorldToScreenPoint(new Vector3(0, BoardTopY + .3f, 0));
@@ -880,7 +881,7 @@ public partial class Game : MonoBehaviour
         Panel(new Rect(sign.x, sign.y + 14, sign.width, sign.height), Darker(Cream));
         Panel(sign, Cream);
         Label(new Rect(sign.x, sign.y + 4, sign.width, 90), "SHELF SORT", 80, Red, true);
-        Label(new Rect(sign.x, sign.y + 88, sign.width, 40), $"{Worlds[world].name.ToUpper()} · OUVERT 24/24", 32, Ink);
+        Label(new Rect(sign.x, sign.y + 88, sign.width, 40), Tf("{0} · OUVERT 24/24", Name(world).ToUpper()), 32, Ink);
 
         // full-width awning hung from a wooden rail
         float ay = sign.yMax + 25;

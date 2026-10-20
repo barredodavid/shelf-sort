@@ -85,7 +85,7 @@ public partial class Game
 
         int after = TotalStars;
         int opened = Enumerable.Range(1, Worlds.Length - 1).FirstOrDefault(w => before < Worlds[w].need && after >= Worlds[w].need);
-        unlockedMsg = opened > 0 ? $"Nouveau pays débloqué : {Worlds[opened].name} !" : null;
+        unlockedMsg = opened > 0 ? Tf("Nouveau pays débloqué : {0} !", Name(opened)) : null;
     }
 
     // stars drop in one after another on the summary, each with a rising note (confetti on the third), then the
@@ -168,8 +168,8 @@ public partial class Game
         // why
         string[] why =
         {
-            $"En {par} coups ou moins ({moves} coups)",
-            $"Plus de 40 % du temps restant ({Mathf.RoundToInt(100 * time / baseTime)} %)",
+            Tf("En {0} coups ou moins ({1} coups)", par, moves),
+            Tf("Plus de 40 % du temps restant ({0} %)", Mathf.RoundToInt(100 * time / baseTime)),
             "Sans bonus ni pub",
         };
         for (int i = 0; i < 3; i++)

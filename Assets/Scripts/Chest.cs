@@ -67,7 +67,7 @@ public partial class Game
         var loot = new Rect(W / 2 - 400, H * .66f, 800, chestSticker != null ? 190 : 140);
         Panel(new Rect(loot.x, loot.y + 14, loot.width, loot.height), Darker(Ink));
         Panel(loot, Ink);
-        Label(new Rect(loot.x, loot.y + 14, loot.width, 110), $"+{chestCoins} pièces", 80, Gold, true);
+        Label(new Rect(loot.x, loot.y + 14, loot.width, 110), Tf("+{0} pièces", chestCoins), 80, Gold, true);
         if (chestSticker != null) Label(new Rect(loot.x, loot.y + 118, loot.width, 56), chestSticker, 36, Color.white);
         GUI.matrix = keep;
         if (Time.time > chestOpenedAt + .8f && Button(new Rect(W / 2 - 220, H * .66f + 230, 440, 130), "Super !", Gold, 56))

@@ -46,10 +46,10 @@ public partial class Game
                      ("ice", all.Any(LevelGen.IsFrozen), "PRODUIT GELÉ", "Il ne bouge pas. Pose 2 produits identiques à côté de lui : le trio le libère."),
                      ("box", all.Any(LevelGen.IsBoxed), "CARTON MYSTÈRE", "Attrape-le pour découvrir le produit caché dedans."),
                      ("crate", all.Contains(LevelGen.Crate), "CAISSE", "Elle ne bouge pas. Fais un trio sur une étagère voisine pour la casser."),
-                     ("pigeon", twist == 0, "LE PIGEON DE PARIS", $"Il se pose sur un produit. Touche-le vite pour le chasser (+{PigeonCoins} pièces), sinon il emporte le produit ailleurs !"),
-                     ("riposo", twist == 1, "LA SIESTE ITALIENNE", $"Quand un rideau de fer descend à moitié, l'étagère va fermer {SiestaTime:0} s. Fais vite un trio dessus : +{SiestaSeconds} s au chrono !"),
-                     ("bento", twist == 2, "LE PRODUIT CADENASSÉ", $"Un produit sous cadenas ne se prend pas. Le cadenas s'ouvre après {BentoMoves} coups joués ailleurs : le chiffre dessus montre ceux qui restent."),
-                     ("promo", twist == 3, "PROMO FLASH", $"Une étiquette -50 % se pose sur un produit : fais son trio avant la fin pour +{SaleSeconds} s au chrono. Raté : -{SaleMissed} s !"),
+                     ("pigeon", twist == 0, "LE PIGEON DE PARIS", Tf("Il se pose sur un produit. Touche-le vite pour le chasser (+{0} pièces), sinon il emporte le produit ailleurs !", PigeonCoins)),
+                     ("riposo", twist == 1, "LA SIESTE ITALIENNE", Tf("Quand un rideau de fer descend à moitié, l'étagère va fermer {0} s. Fais vite un trio dessus : +{1} s au chrono !", SiestaTime, SiestaSeconds)),
+                     ("bento", twist == 2, "LE PRODUIT CADENASSÉ", Tf("Un produit sous cadenas ne se prend pas. Le cadenas s'ouvre après {0} coups joués ailleurs : le chiffre dessus montre ceux qui restent.", BentoMoves)),
+                     ("promo", twist == 3, "PROMO FLASH", Tf("Une étiquette -50 % se pose sur un produit : fais son trio avant la fin pour +{0} s au chrono. Raté : -{1} s !", SaleSeconds, SaleMissed)),
                  })
             if (has && !daily && world * LevelsPerWorld + lvl == IntroLevel(key))
                 intros.Add((key, title, text));

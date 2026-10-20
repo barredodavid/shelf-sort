@@ -184,7 +184,7 @@ public partial class Game
             var tag = new Rect(top.x - 150, top.y - 120, 300, 70); // clear of the flag below it
             Panel(new Rect(tag.x, tag.y + 8, tag.width, tag.height), Darker(Worlds[mapWorld].color));
             Panel(tag, Worlds[mapWorld].color);
-            Label(tag, Worlds[mapWorld].name.ToUpper(), 40, Color.white, true);
+            Label(tag, Name(mapWorld).ToUpper(), 40, Color.white, true);
 
             Label(new Rect(0, bottom - 470, W, 60), "Choisis ta destination", 38, new Color(1, 1, 1, .8f));
             for (int w = 0; w < Worlds.Length; w++)
@@ -208,10 +208,10 @@ public partial class Game
                 var flag = new Rect(r.x + 26, r.y + 30, 96, 64);
                 Fill(new Rect(flag.x - 5, flag.y - 5, flag.width + 10, flag.height + 10), Color.white);
                 Flag(flag, w);
-                Label(new Rect(r.x + 140, r.y + 14, r.width - 310, 70), Worlds[w].name.ToUpper(), Worlds[w].name.Length > 7 ? 30 : 40, Color.white, true, TextAnchor.MiddleLeft);
+                Label(new Rect(r.x + 140, r.y + 14, r.width - 310, 70), Name(w).ToUpper(), Name(w).Length > 7 ? 30 : 40, Color.white, true, TextAnchor.MiddleLeft);
                 Star(new Rect(r.x + 140, r.y + 92, 40, 40), true);
                 Label(new Rect(r.x + 186, r.y + 84, r.width - 330, 56),
-                    open ? $"{WorldStars(w)} / {LevelsPerWorld * 3}" : $"{Worlds[w].need} pour ouvrir", 28, Color.white, false, TextAnchor.MiddleLeft);
+                    open ? $"{WorldStars(w)} / {LevelsPerWorld * 3}" : Tf("{0} pour ouvrir", Worlds[w].need), 28, Color.white, false, TextAnchor.MiddleLeft);
                 if (landmarkIcons[w])
                 {
                     GUI.color = open ? Color.white : new Color(.6f, .62f, .68f, .8f);
@@ -232,7 +232,7 @@ public partial class Game
             var tag = new Rect(W / 2 - 300, bottom - 300, 600, 110);
             Panel(new Rect(tag.x, tag.y + 10, tag.width, tag.height), Darker(Worlds[flyTo].color));
             Panel(tag, Worlds[flyTo].color);
-            Label(tag, $"Direction : {Worlds[flyTo].name}", 48, Color.white, true);
+            Label(tag, Tf("Direction : {0}", Name(flyTo)), 48, Color.white, true);
         }
 
         // header

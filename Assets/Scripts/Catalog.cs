@@ -40,7 +40,7 @@ public partial class Game
         // country switcher
         var title = new Rect(310, y, 460, 96);
         Panel(title, Worlds[catalogWorld].color);
-        Label(title, Worlds[catalogWorld].name.ToUpper(), 50, Color.white, true);
+        Label(title, Name(catalogWorld).ToUpper(), 50, Color.white, true);
         for (int d = -1; d <= 1; d += 2)
             if (Button(new Rect(d < 0 ? 790 : 920, y, 120, 96), d < 0 ? "<" : ">", Gold, 56))
             {
@@ -53,8 +53,8 @@ public partial class Game
         bool full = n == Products.Count;
         var bar = new Rect(40, y + 120, W - 80, 90);
         Panel(bar, full ? Gold : Cream);
-        Label(new Rect(bar.x + 30, bar.y, 400, bar.height), $"{n} / {Products.Count} autocollants", 38, Ink, false, TextAnchor.MiddleLeft);
-        Label(new Rect(bar.center.x, bar.y, bar.width / 2 - 30, bar.height), full ? "Album complet !" : $"Complet : +{AlbumCoins} pièces", 34,
+        Label(new Rect(bar.x + 30, bar.y, 400, bar.height), Tf("{0} / {1} autocollants", n, Products.Count), 38, Ink, false, TextAnchor.MiddleLeft);
+        Label(new Rect(bar.center.x, bar.y, bar.width / 2 - 30, bar.height), full ? "Album complet !" : Tf("Complet : +{0} pièces", AlbumCoins), 34,
             full ? Red : new Color(.4f, .45f, .55f), false, TextAnchor.MiddleRight);
         if (Application.isEditor && Button(new Rect(W - 200, y + 230, 160, 70), catalogAll ? "Album" : "Tout", Mist, 30))
         {
@@ -68,7 +68,7 @@ public partial class Game
             var p = ToGui(catalogPos[id] + new Vector3(0, -.2f, -.9f));
             var tag = new Rect(p.x - 150, p.y - 4, 300, 52);
             Panel(tag, Ink);
-            Label(tag, Shown(id) ? ProductNames[catalogWorld][id] : "?", 30, Color.white);
+            Label(tag, Shown(id) ? ProductNames[catalogWorld][id] : "?", 30, Color.white); // names translated by Label
         }
     }
 }

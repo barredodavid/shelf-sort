@@ -113,7 +113,7 @@ public partial class Game
                     saleId = -1;
                     nextSale = t + 12;
                     time = Mathf.Max(0, time - SaleMissed);
-                    Toast($"PROMO RATÉE ! -{SaleMissed} s");
+                    Toast(Tf("PROMO RATÉE ! -{0} s", SaleMissed));
                     Fx.Play("back", .7f);
                     Fx.Haptic(2);
                     Fly(from, clockTarget, $"-{SaleMissed} s");
@@ -305,7 +305,7 @@ public partial class Game
         if (tapped)
         {
             Fx.Play("drop", 2f);
-            Reward(s, PigeonCoins, 1, $"Ouste ! +{PigeonCoins}");
+            Reward(s, PigeonCoins, 1, Tf("Ouste ! +{0}", PigeonCoins));
             Count("pigeons");
         }
     }
@@ -375,7 +375,7 @@ public partial class Game
             ShooPigeon(true);
             return true;
         }
-        string why = s == shutS ? "Fermé pour la sieste !" : seals.TryGetValue((s, i), out int n) ? $"Cadenassé : encore {n} coup{(n > 1 ? "s" : "")}" : null;
+        string why = s == shutS ? "Fermé pour la sieste !" : seals.TryGetValue((s, i), out int n) ? Tf("Cadenassé : encore {0} coup(s)", n) : null;
         if (why == null) return false;
         Toast(why);
         Fx.Play("back");
@@ -392,7 +392,7 @@ public partial class Game
             seals.Remove(c);
             Fx.Burst(SlotAim(c.s, c.i) + new Vector3(0, 0, -1), 15);
             Fx.Play("match", 1.6f);
-            Reward(c.s, 0, BentoSeconds, $"CADENAS OUVERT ! +{BentoSeconds} s");
+            Reward(c.s, 0, BentoSeconds, Tf("CADENAS OUVERT ! +{0} s", BentoSeconds));
             Count("bento");
         }
     }
@@ -403,14 +403,14 @@ public partial class Game
         seals.Keys.Where(c => c.s == s).ToList().ForEach(c => seals.Remove(c));
         if (s == shutWarn) // emptied a trio there before the shutter fell
         {
-            Reward(s, 0, SiestaSeconds, $"JUSTE À TEMPS ! +{SiestaSeconds} s");
+            Reward(s, 0, SiestaSeconds, Tf("JUSTE À TEMPS ! +{0} s", SiestaSeconds));
             Count("siesta");
         }
         if (id == saleId)
         {
             saleId = -1;
             nextSale = Time.time + 12;
-            Reward(s, 0, SaleSeconds, $"PROMO ! +{SaleSeconds} s");
+            Reward(s, 0, SaleSeconds, Tf("PROMO ! +{0} s", SaleSeconds));
             Fx.Play("till");
             Count("promo");
         }

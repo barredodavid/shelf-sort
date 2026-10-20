@@ -55,6 +55,7 @@ public partial class Game
         GUI.color = Color.white;
         StarCount(156, y, TotalStars);
         CoinsPill(W - 290, y);
+        if (Button(new Rect(W - 410, y, 104, 96), English ? "EN" : "FR", Mist, 36)) ToggleLanguage(); // the game's language
         DailyButton(new Rect(W - 290, y + 116, 250, 80));
         if (Button(new Rect(40, y + 116, 250, 80), "Collection", Mist, 34))
         {
@@ -85,7 +86,7 @@ public partial class Game
         var c = Worlds[world].color;
         Panel(new Rect(country.x, country.y + 12, country.width, country.height), Darker(c));
         Panel(country, c);
-        Label(new Rect(country.x, country.y + 8, country.width, 70), Worlds[world].name.ToUpper(), 54, Color.white, true);
+        Label(new Rect(country.x, country.y + 8, country.width, 70), Name(world).ToUpper(), 54, Color.white, true);
         var bar = new Rect(country.x + 90, country.y + 92, country.width - 260, 30);
         Panel(bar, new Color(0, 0, 0, .25f));
         float filled = WorldStars(world) / (float)(LevelsPerWorld * 3);
@@ -106,7 +107,7 @@ public partial class Game
         GUIUtility.ScaleAroundPivot(Vector2.one * pulse, play.center * k);
         if (Button(play, "", Gold)) OpenMenu(Menu.Map);
         Label(new Rect(play.x, play.y + 18, play.width, 130), "JOUER", 110, Ink);
-        Label(new Rect(play.x, play.y + 142, play.width, 60), $"Niveau {world + 1}-{FirstToPlay(world) + 1}", 40, new Color(Ink.r, Ink.g, Ink.b, .7f));
+        Label(new Rect(play.x, play.y + 142, play.width, 60), Tf("Niveau {0}-{1}", world + 1, FirstToPlay(world) + 1), 40, new Color(Ink.r, Ink.g, Ink.b, .7f));
         // a shine sweeping across every few seconds
         float t = Mathf.Repeat(Time.time, 3f);
         if (t < .7f)

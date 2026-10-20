@@ -93,8 +93,8 @@ public partial class Game
         Panel(new Rect(r.x, r.y + 12, r.width, r.height), Darker(Ink));
         Panel(r, Ink);
         Medal(new Rect(r.x + 30, r.y + 25, 120, 120), trophyTier, trophyIndex);
-        Label(new Rect(r.x + 180, r.y + 18, r.width - 200, 60), $"TROPHÉE {TierNames[trophyTier].ToUpper()} !", 40, TierColors[trophyTier], false, TextAnchor.MiddleLeft);
-        Label(new Rect(r.x + 180, r.y + 78, r.width - 200, 70), $"{trophyMsg}  +{TierCoins[trophyTier]} pièces", 36, Color.white, false, TextAnchor.MiddleLeft);
+        Label(new Rect(r.x + 180, r.y + 18, r.width - 200, 60), Tf("TROPHÉE {0} !", T(TierNames[trophyTier]).ToUpper()), 40, TierColors[trophyTier], false, TextAnchor.MiddleLeft);
+        Label(new Rect(r.x + 180, r.y + 78, r.width - 200, 70), Tf("{0}  +{1} pièces", T(trophyMsg), TierCoins[trophyTier]), 36, Color.white, false, TextAnchor.MiddleLeft);
     }
 
     // a medal: a rim in its tier's colour round a pale disc, trophy t's picture on it (tier -1: not won yet, greyed)
@@ -260,7 +260,7 @@ public partial class Game
         int won = 0;
         for (int t = 0; t < TrophyList.Length; t++) won += TierOf(t);
         Label(new Rect(300, y - 8, W - 340, 72), "TROPHÉES", 60, Red, true);
-        Label(new Rect(300, y + 58, W - 340, 40), $"{won} / {TrophyList.Length * 3} médailles", 30, new Color(.4f, .45f, .55f));
+        Label(new Rect(300, y + 58, W - 340, 40), Tf("{0} / {1} médailles", won, TrophyList.Length * 3), 30, new Color(.4f, .45f, .55f));
         float row = Mathf.Min(170, (H - y - 170) / TrophyList.Length);
         for (int t = 0; t < TrophyList.Length; t++)
         {
@@ -273,7 +273,7 @@ public partial class Game
             Medal(new Rect(card.x + 6, card.y - 5, m, m), tier - 1, t);
             float x = card.x + 28 + m;
             Label(new Rect(x, card.y + 6, card.width - m - 330, card.height * .48f), name, 40, Ink, false, TextAnchor.MiddleLeft);
-            string what = tier == 3 ? "Trophée complet !" : string.Format(goal, tiers[tier]);
+            string what = tier == 3 ? "Trophée complet !" : Tf(goal, tiers[tier]);
             Label(new Rect(x, card.y + card.height * .5f, card.width - m - 330, card.height * .36f), what, 28, new Color(.42f, .46f, .56f), false, TextAnchor.MiddleLeft);
             float to = tiers[Mathf.Min(tier, 2)], fill = tier == 3 ? 1 : Mathf.Clamp01(v / to);
             var bar = new Rect(card.xMax - 300, card.y + card.height * .16f, 270, 42);
