@@ -15,6 +15,7 @@ public partial class Game
     static readonly Vector2[] Lean = { new(25, 0), new(0, 35), default, default };
 
     Transform globe, plane3D;
+    Transform[] route; // the flight's dotted trail on the globe
     readonly Transform[] pins = new Transform[Places.Length];
     float flyAt = -1;
     int flyFrom, flyTo;
@@ -36,6 +37,15 @@ public partial class Game
     // seen three-quarters, standing up, rather than head-on
     static Quaternion View(float lat, float lon) => Facing(lat - 25, lon);
 
+    // where the plane parks in country w, just south of its flag (a point of the unit globe), and how it sits there in
+    // the globe's frame: belly down, nose north (the model's nose is +Y, its top -Z)
+    static Vector3 Parking(int w) => Dir(Places[w].x - 6, Places[w].y);
+    static Quaternion ParkRot(int w)
+    {
+        var d = Parking(w);
+        return Quaternion.LookRotation(-d, Vector3.Cross(d, Vector3.Cross(Vector3.up, d).normalized));
+    }
+
     void OpenWorldMap(int flyToWorld)
     {
         RefreshStars();
@@ -53,6 +63,7 @@ public partial class Game
     void Land(int w)
     {
         world = w;
+        PlayerPrefs.SetInt("world", w); // the game reopens where the plane last landed
         lvl = FirstToPlay(w);
         flyAt = -1;
         OpenMenu(Menu.Map);
@@ -97,22 +108,37 @@ public partial class Game
         float size = 4.7f; // close on our country, the globe overflowing the width a little
         if (flyAt >= 0 && Time.time >= flyAt)
         {
-            // flight: the plane stays in front, the globe turns under it along the great circle
+            // flight: from parking spot to parking spot along the great circle, the globe turning under the plane;
+            // it climbs and grows mid-flight, belly to the globe and nose along the route, a dotted trail behind it
             float t = Mathf.Clamp01((Time.time - flyAt) / FlightTime), e = Mathf.SmoothStep(0, 1, t);
-            Vector3 a = Dir(Places[flyFrom].x, Places[flyFrom].y), b = Dir(Places[flyTo].x, Places[flyTo].y);
+            Vector3 a = Parking(flyFrom), b = Parking(flyTo);
             var here = Vector3.Slerp(a, b, e);
-            var follow = View(Mathf.Asin(here.y) * Mathf.Rad2Deg, Mathf.Atan2(here.x, -here.z) * Mathf.Rad2Deg);
+            var follow = View(Mathf.Asin(here.y) * Mathf.Rad2Deg + 6, Mathf.Atan2(here.x, -here.z) * Mathf.Rad2Deg);
             globe.rotation = Quaternion.Slerp(flyStartRot, follow, Mathf.SmoothStep(0, 1, Mathf.Clamp01(t / .3f)));
             size += 2f * Mathf.Sin(Mathf.PI * t); // pull back mid-flight to see the whole globe
             plane3D.localScale = Vector3.one * (.55f + .3f * Mathf.Sin(Mathf.PI * t));
-            // heading on screen: where the route goes next, seen through the globe's current rotation
-            var next = globe.rotation * Vector3.Slerp(a, b, Mathf.Min(e + .02f, 1)) - globe.rotation * here;
-            float heading = Mathf.Atan2(next.x, next.y) * Mathf.Rad2Deg;
-            float alt = .3f + .5f * Mathf.Sin(Mathf.PI * t);
-            plane3D.SetPositionAndRotation(globe.position + globe.rotation * here * (GlobeR + alt), Quaternion.Euler(0, 0, -heading));
+            float alt = .12f + .6f * Mathf.Sin(Mathf.PI * t);
+            var along = Vector3.Cross(Vector3.Cross(a, b).normalized, here); // the way the great circle goes, here
+            var cruise = Quaternion.LookRotation(-here, along);
+            float turn = Mathf.Max(0, 1 - t / .15f) + Mathf.Max(0, (t - .85f) / .15f); // turning onto the route from the parked heading, and back at the end
+            var local = Quaternion.Slerp(cruise, ParkRot(t < .5f ? flyFrom : flyTo), Mathf.SmoothStep(0, 1, turn));
+            float bank = 25 * Mathf.Sin(Mathf.PI * Mathf.Clamp01(t / .15f)) - 25 * Mathf.Sin(Mathf.PI * Mathf.Clamp01((t - .85f) / .15f)); // leaning into those turns
+            plane3D.SetPositionAndRotation(globe.TransformPoint(here * (GlobeR + alt)), globe.rotation * local * Quaternion.Euler(0, bank, 0));
+            if (route == null || !route[0]) // the trail: white dots on the ground, showing up behind the plane
+            {
+                route = new Transform[Mathf.Max(2, Mathf.RoundToInt(Vector3.Angle(a, b) / 3))]; // a dot every 3 degrees, short trips too
+                for (int i = 0; i < route.Length; i++)
+                {
+                    route[i] = Products.Place(globe, Products.Sphere, Color.white, Vector3.Slerp(a, b, (i + .5f) / route.Length) * (GlobeR + .02f), default, Vector3.one * .07f, .2f);
+                    route[i].gameObject.SetActive(false);
+                }
+            }
+            for (int i = 0; i < route.Length; i++) route[i].gameObject.SetActive((i + .5f) / route.Length < e - .03f);
             if (t >= 1)
             {
                 Fx.Play("win");
+                foreach (var dot in route) Destroy(dot.gameObject);
+                route = null;
                 Land(flyTo);
                 return;
             }
@@ -122,11 +148,9 @@ public partial class Game
             // idle: the current country in view, the plane parked just south of its flag, nose north, breathing a little
             var p = Places[mapWorld];
             globe.rotation = View(p.x, p.y);
-            var d = Dir(p.x - 6, p.y);
-            var north = Vector3.Cross(d, Vector3.Cross(Vector3.up, d).normalized);
             float alt = .12f + .03f * Mathf.Sin(Time.time * 2);
             plane3D.localScale = Vector3.one * .55f;
-            plane3D.SetPositionAndRotation(globe.TransformPoint(d * (GlobeR + alt)), globe.rotation * Quaternion.LookRotation(-d, north));
+            plane3D.SetPositionAndRotation(globe.TransformPoint(Parking(mapWorld) * (GlobeR + alt)), globe.rotation * ParkRot(mapWorld));
             if (flyAt >= 0) flyStartRot = globe.rotation;
         }
         cam.orthographicSize = size;
@@ -183,6 +207,14 @@ public partial class Game
                     Label(here, "ICI", 30, Ink);
                 }
             }
+        }
+
+        else // in flight: where to, in that country's colour
+        {
+            var tag = new Rect(W / 2 - 300, bottom - 300, 600, 110);
+            Panel(new Rect(tag.x, tag.y + 10, tag.width, tag.height), Darker(Worlds[flyTo].color));
+            Panel(tag, Worlds[flyTo].color);
+            Label(tag, $"Direction : {Worlds[flyTo].name}", 48, Color.white, true);
         }
 
         // header

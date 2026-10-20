@@ -140,16 +140,29 @@ public partial class Game
             for (float z = z0; z <= z1; z += .5f) river.Add(new Vector3(MapPos(z / NodeGap).x - 4.4f, 0, z)); // bending with the road, clear of the shops
             Products.Place(mapRoot, Products.Ribbon(river, 2.1f), C2("#d6ccb8"), Up(.004f), smooth: .1f);
             Products.Place(mapRoot, Products.Ribbon(river, 1.7f), C2("#5fa3d6"), Up(.008f), smooth: .8f);
+            for (int i = 0; i + 1 < river.Count; i++) // a stone parapet along the quay on the road's side
+            {
+                var a = river[i] + new Vector3(.98f, 0, 0);
+                var d = river[i + 1] - river[i];
+                Products.Place(mapRoot, Products.Cube, C2("#e3dacb"), a + d / 2 + Up(.11f), new Vector3(0, Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg, 0), new Vector3(.12f, .22f, d.magnitude + .02f), .1f);
+            }
         }
 
-        // road: sidewalks in the country's paving, white kerbs, asphalt, dashed middle line; it runs into the plaza
+        // road: sidewalks in the country's paving, white kerbs, asphalt, dashed middle line (double yellow in the USA); it
+        // runs into the plaza
         var pts = new List<Vector3>();
         for (float t = StartT; t <= PlazaT - .4f; t += .05f) pts.Add(MapPos(t));
         string[] paving = { "#e6dccb", "#e8c9a4", "#d3cec2", "#d9d9d6" };
         Products.Place(mapRoot, Products.Ribbon(pts, 2.7f), C2(paving[w]), Up(.005f), smooth: .1f);
         Products.Place(mapRoot, Products.Ribbon(pts, 1.35f), C2("#fbf8f0"), Up(.01f));
-        Products.Place(mapRoot, Products.Ribbon(pts, 1.1f), C2("#5a5f6c"), Up(.02f), smooth: .15f);
-        Products.Place(mapRoot, Products.Ribbon(pts, .09f, i => i % 6 < 3), Color.white, Up(.03f));
+        var asphalt = Products.Place(mapRoot, Products.Ribbon(pts, 1.1f, tile: true), C2("#5a5f6c"), Up(.02f), smooth: .15f);
+        if (w <= 1) asphalt.GetComponent<Renderer>().material = Products.Cobbles(w); // Paris, Rome: cobbles, no lines
+        if (w == 3) // American double yellow centre line
+        {
+            Products.Place(mapRoot, Products.Ribbon(pts, .2f), C2("#f2c230"), Up(.03f));
+            Products.Place(mapRoot, Products.Ribbon(pts, .07f), C2("#5a5f6c"), Up(.035f), smooth: .15f);
+        }
+        else if (w > 1) Products.Place(mapRoot, Products.Ribbon(pts, .09f, i => i % 6 < 3), Color.white, Up(.03f));
 
         // one shop per level; the next one to play gets a glowing ring round its pavement (it pulses with the shop)
         for (int g = (int)First; g <= Last; g++)
@@ -248,6 +261,7 @@ public partial class Game
         {
             var d = Products.Decor(w, variant).transform;
             d.SetParent(mapRoot);
+            yaw = yaw % 50 - 25; // buildings face the camera, give or take
             d.SetPositionAndRotation(new Vector3(x, 0, z), Quaternion.Euler(0, yaw, 0));
             var rs = d.GetComponentsInChildren<Renderer>();
             var b = rs[0].bounds;
@@ -267,15 +281,26 @@ public partial class Game
                 float x = MapO.x + (side == 0 ? -1 : 1) * (2.3f + 1.8f * Hash01(k, side + 7));
                 TryDecor(Hash01(k, side + 3), x, MapPos(t).z + (Hash01(k, side + 5) - .5f) * .4f, Hash01(k, side + 9) * 360);
             }
+        // a wall of each city's buildings along both edges, filling every gap: Haussmann blocks, palazzi, machiya houses
+        // with pagodas and cherry trees, brick blocks and glass towers (ranges of Decor variants)
+        float wallTo = new[] { .45f, .45f, .99f, .5f }[w];
+        for (float t = First - 6; t < PlazaT; t += .3f)
+            for (int side = 0; side < 2; side++)
+            {
+                int k = Mathf.RoundToInt(t * 10) + 500;
+                float x = MapO.x + (side == 0 ? -1 : 1) * (3.6f + .8f * Hash01(k, side + 7));
+                TryDecor(wallTo * Hash01(k, side + 3), x, MapPos(t).z, Hash01(k, side + 9) * 360);
+            }
 
         // behind the plaza, after a stretch of open lawn, a calm park of the country's trees across the whole width
-        float trees = new[] { .66f, .6f, .42f, .55f }[w]; // where Decor's tree variants start: plane trees, cypresses, cherries, palms
+        // (Paris, Rome and New York: a skyline of their buildings instead)
+        float trees = new[] { 0, 0, .52f, 0 }[w], treesEnd = new[] { .45f, .45f, .99f, .5f }[w]; // the range of Decor variants: Haussmann blocks, palazzi, cherries, NY buildings
         for (float z = plaza.z + PlazaR + 2; z < z1 - 1; z += 1.6f)
             for (float x = -3.4f; x <= 3.4f; x += 1.7f)
             {
                 int k = Mathf.RoundToInt(z * 7 + x * 3);
                 if (Hash01(k, 11) < .45f) continue;
-                TryDecor(Mathf.Lerp(trees, .99f, Hash01(k, 12)), MapO.x + x + (Hash01(k, 13) - .5f) * .5f, z + (Hash01(k, 14) - .5f) * .5f, Hash01(k, 15) * 360);
+                TryDecor(Mathf.Lerp(trees, treesEnd, Hash01(k, 12)), MapO.x + x + (Hash01(k, 13) - .5f) * .5f, z + (Hash01(k, 14) - .5f) * .5f, Hash01(k, 15) * 360);
             }
     }
 
