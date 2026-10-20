@@ -81,6 +81,7 @@ public partial class Game
         PlayerPrefs.SetInt("world", world);
         PlayerPrefs.SetInt("lvl", lvl);
         PlayerPrefs.Save();
+        CheckTrophies(); // three-star levels, countries done
 
         int after = TotalStars;
         int opened = Enumerable.Range(1, Worlds.Length - 1).FirstOrDefault(w => before < Worlds[w].need && after >= Worlds[w].need);

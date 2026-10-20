@@ -75,6 +75,7 @@ public partial class Game
         PlayerPrefs.Save();
         unlockedMsg = streak > 1 ? $"Série : {streak} jours de suite !" : "Reviens demain pour une série !";
         stickerMsg = GiveSticker(world); // the challenge's country
+        CheckTrophies(); // the streak
     }
 
     // the title screen's button: today's twist, done or not, the streak in a badge

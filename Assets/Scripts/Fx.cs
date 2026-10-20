@@ -18,6 +18,7 @@ public static class Fx
         clips["back"] = Make(.12f, (t, p) => Mathf.Lerp(260, 200, p), .2f);
         clips["match"] = Arp(new[] { 523f, 659f, 784f }, .06f, .3f);
         clips["win"] = Arp(new[] { 523f, 659f, 784f, 1047f, 1319f }, .1f, .3f);
+        clips["till"] = Arp(new[] { 1568f, 2093f, 2637f }, .045f, .22f); // cash register ka-ching
         clips["lose"] = Arp(new[] { 392f, 330f, 262f, 196f }, .15f, .3f);
         confettiMat = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultParticleMaterial;
     }

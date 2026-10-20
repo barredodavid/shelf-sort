@@ -6,7 +6,7 @@ using UnityEngine;
 // (HomeDemo.cs); "JOUER" leads to the map (Map.cs).
 public partial class Game
 {
-    enum Menu { None, Home, Pause, Map, Catalog, World }
+    enum Menu { None, Home, Pause, Map, Catalog, World, Trophies }
 
     Menu menu = Menu.Home;
     float menuAt;
@@ -14,7 +14,7 @@ public partial class Game
     // title-screen demo shelf (HomeDemo.cs)
     float heroCenterPx = -1; // GUI-canvas y where the display shelf sits, set by HomeScreen's layout
 
-    bool Paused => menu != Menu.None;
+    bool Paused => menu != Menu.None || intros.Count > 0; // a menu, or the bubble explaining something new
 
     static bool SoundOn => PlayerPrefs.GetInt("sound", 1) == 1;
 
@@ -61,6 +61,7 @@ public partial class Game
             catalogWorld = world;
             OpenMenu(Menu.Catalog); // the sticker album
         }
+        if (Button(new Rect(W / 2 - 160, y + 116, 320, 80), "Trophées", Mist, 34)) OpenMenu(Menu.Trophies);
 
         // logo, tilted like a hand-painted shop sign: drops in with a bounce, then bobs gently
         float ly = y + 215 + 8 * Mathf.Sin(Time.time * 2); // below the second row of buttons (Collection, Défi du jour)

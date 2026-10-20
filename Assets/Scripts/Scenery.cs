@@ -386,6 +386,71 @@ public static partial class Products
         return root;
     }
 
+    // Italian shop shutter for a shelf front `width` wide, `height` tall, its pivot at the top middle: the roller box,
+    // the corrugated steel "curtain" (a child whose y scale is how far it is down, 0..1), its bottom bar ("bar", to be
+    // moved down with it) and, hanging on the curtain just above the bar, the "Torno subito" board ("sign", to swing;
+    // the board writes on it)
+    public static GameObject Shutter(float width, float height)
+    {
+        var root = new GameObject("Shutter");
+        var steel = Plain(C("#8c949e"), .6f);
+        Part(root, Cube, steel, new(0, .1f, 0), scale: new(width + .1f, .2f, .26f)); // the roller box
+        var curtain = new GameObject("curtain").transform;
+        curtain.SetParent(root.transform, false);
+        Part(curtain.gameObject, Cube, Paint((u, v) => Mathf.Repeat(v * 14, 1) < .25f ? C("#7a828c") : C("#b6bdc6"), .55f), new(0, -.5f, -.1f), scale: new(width, 1, .03f));
+        curtain.localScale = new Vector3(1, height, 1);
+        var bar = new GameObject("bar").transform;
+        bar.SetParent(root.transform, false);
+        Part(bar.gameObject, Cube, Plain(C("#5a6170"), .5f), new(0, 0, -.11f), scale: new(width + .04f, .08f, .07f));
+        var sign = new GameObject("sign").transform;
+        sign.SetParent(bar, false);
+        sign.localPosition = new Vector3(0, .84f, -.14f); // hung on the curtain's face, just above the bar
+        foreach (float x in new[] { -.6f, .6f }) Part(sign.gameObject, Cylinder, Plain(C("#2a2d35"), .4f), new(x, -.1f, 0), scale: new(.012f, .1f, .012f)); // its strings
+        Part(sign.gameObject, Cube, Plain(C("#c8322c"), .4f), new(0, -.5f, 0), scale: new(1.7f, .6f, .03f));
+        Part(sign.gameObject, Cube, Plain(C("#fbf3e4"), .4f), new(0, -.5f, -.02f), scale: new(1.6f, .52f, .01f));
+        return root;
+    }
+
+    // a sealed bento: the product (still in sight) stands in a red lacquer tray with a gold cherry blossom on its front,
+    // tied up in an indigo furoshiki: a band down its front, one across, one over the top, the knot on top. The cloth
+    // is the child "wrap" (it flies off when the bento opens).
+    public static GameObject BentoWrap()
+    {
+        var root = new GameObject("BentoWrap");
+        var lacquer = Plain(C("#b3201e"), .85f);
+        var black = Plain(C("#1c1c20"), .85f);
+        var gold = Plain(C("#e8c64a"), .8f);
+        Part(root, Cube, lacquer, new(0, .14f, -.43f), scale: new(1.04f, .28f, .04f)); // the tray's front, sides and back
+        Part(root, Cube, lacquer, new(0, .14f, .43f), scale: new(1.04f, .28f, .04f));
+        foreach (int s in new[] { -1, 1 }) Part(root, Cube, lacquer, new(s * .5f, .14f, 0), scale: new(.04f, .28f, .9f));
+        Part(root, Cube, black, new(0, .29f, -.43f), scale: new(1.06f, .03f, .06f)); // its black rim
+        for (int p = 0; p < 5; p++)
+            Part(root, Sphere, gold, new(.055f * Mathf.Cos(p * 1.257f), .14f + .055f * Mathf.Sin(p * 1.257f), -.455f), scale: new(.07f, .07f, .01f));
+        var wrap = new GameObject("wrap");
+        wrap.transform.SetParent(root.transform, false);
+        var cloth = Paint((u, v) => Dot(u, v, 10, 6, .5f, .22f, 0, out _) ? C("#f4ecdc") : C("#2f3f86"), .3f); // indigo with white dots
+        Part(wrap, Cube, cloth, new(0, .8f, -.5f), scale: new(.2f, 1.4f, .02f)); // down the front
+        Part(wrap, Cube, cloth, new(0, .75f, -.51f), scale: new(1.08f, .2f, .02f)); // across it
+        Part(wrap, Cube, cloth, new(0, 1.5f, 0), scale: new(.2f, .02f, 1f)); // over the top
+        Part(wrap, Sphere, cloth, new(0, 1.55f, -.35f), scale: new(.3f, .24f, .26f)); // the knot
+        foreach (int s in new[] { -1, 1 }) Part(wrap, Sphere, cloth, new(s * .25f, 1.66f, -.35f), new(0, 0, s * -40), new(.38f, .15f, .2f)); // its ears
+        return root;
+    }
+
+    // a sale tag hanging from a little hook: bright yellow card with a red border and a punched hole, on a string (the
+    // board writes "-50%" on it); its card's material is its own, to blink
+    public static GameObject SaleTag()
+    {
+        var root = new GameObject("SaleTag");
+        Part(root, Cylinder, Plain(C("#2a2d35"), .4f), new(0, .2f, 0), scale: new(.012f, .2f, .012f)); // the string
+        Part(root, Cube, Plain(C("#e8423c"), .5f), new(0, -.16f, 0), scale: new(.66f, .4f, .03f));
+        var card = new Material(Plain(C("#ffd51e"), .5f));
+        card.EnableKeyword("_EMISSION");
+        Part(root, Cube, card, new(0, -.16f, -.02f), scale: new(.58f, .32f, .01f)).name = "card";
+        Part(root, Cylinder, Plain(C("#2a2d35"), .4f), new(0, -.02f, -.025f), new(90, 0, 0), new(.05f, .005f, .05f)); // the hole
+        return root;
+    }
+
     // a treasure chest for the map: plank box, domed lid, gold bands round both and a gold lock at the front (-Z).
     // ready: its colours; otherwise faded to grey (the level still to win)
     public static GameObject Chest(bool ready)

@@ -165,32 +165,8 @@ public partial class Game : MonoBehaviour
         if (daily) Toast(DailyTwists[DailyTwist]);
         else if (hard) Toast("NIVEAU DIFFICILE !");
         else if (goldenId >= 0) Toast("PRODUIT DORÉ !");
-        // the first level with each obstacle explains it once
-        tipUntil = 0;
-        var all = shelves.SelectMany(sh => sh).SelectMany(r => r).ToList();
-        foreach (var (key, has, text) in new[]
-                 {
-                     ("back", shelves.Any(sh => sh.Count > 1), "Les produits du fond avancent quand la rangée de devant est vide"),
-                     ("ice",all.Any(LevelGen.IsFrozen), "Produit gelé : pose 2 produits pareils à côté pour le libérer"),
-                     ("box", all.Any(LevelGen.IsBoxed), "Carton mystère : attrape-le pour voir ce qu'il cache"),
-                     ("crate", all.Contains(LevelGen.Crate), "Caisse : fais un trio sur une étagère voisine pour la casser"),
-                     ("pigeon", twist == 0, "Pigeon : touche-le vite pour le chasser (+3 pièces), sinon il emporte le produit ailleurs !"),
-                     ("riposo", twist == 1, "Sieste : une étagère ferme quelques secondes, attends qu'elle rouvre"),
-                     ("bento", twist == 2, "Bento scellé : il s'ouvre au bout de 3 coups"),
-                     ("promo", twist == 3, "Promo flash : fais vite le trio du produit à -50 % pour un bonus"),
-                     ("client", customers, "Client pressé : fais le trio des produits entourés avant la fin du temps"),
-                 })
-            if (has && PlayerPrefs.GetInt("tip" + key, 0) == 0)
-            {
-                PlayerPrefs.SetInt("tip" + key, 1);
-                tip = text;
-                tipUntil = Time.time + 7;
-                break;
-            }
+        StartIntros(); // a bubble for each new thing in this level (Intro.cs)
     }
-
-    string tip;
-    float tipUntil;
 
     // ---------- layout ----------
 
@@ -255,6 +231,7 @@ public partial class Game : MonoBehaviour
             BuildGlobe();
             return;
         }
+        if (menu == Menu.Trophies) return; // all GUI (Trophies.cs)
         if (menu == Menu.Catalog)
         {
             RenderCatalog();
@@ -459,6 +436,7 @@ public partial class Game : MonoBehaviour
         UpdateMap();
         UpdateWorld();
         TickStars();
+        AnimateStage();
         if (started && !over && !Paused) UpdateEvents();
         if (started && !busy && !over && !Paused)
         {
@@ -615,6 +593,7 @@ public partial class Game : MonoBehaviour
             // a golden trio pays: coins fly to the purse
             foreach (int s in hits.Where(h => Golden(shelves[h][0][0])))
             {
+                Count("golden");
                 coins += GoldPay;
                 PlayerPrefs.SetInt("coins", coins);
                 PlayerPrefs.Save();
@@ -624,7 +603,9 @@ public partial class Game : MonoBehaviour
                 for (int c = 0; c < 6; c++) Fly(ShelfPos(s) + new Vector3((c - 2.5f) * .25f, .7f, 0), coinTarget, null, .1f + c * .06f);
             }
 
-            foreach (int s in hits) TrioEvents(s, LevelGen.Id(shelves[s][0][0])); // the customer's, the sale's, a sealed bento popped
+            Count("trios", hits.Count);
+            Best("combo", combo);
+            foreach (int s in hits) TrioEvents(s, LevelGen.Id(shelves[s][0][0])); // a sealed bento popped, the siesta beaten, the sale's
             yield return new WaitForSeconds(.08f); // let the trio register before it pops
             // the trio swells, jumps and spins, then shrinks away
             var popping = hits.SelectMany(s => Enumerable.Range(0, 3).Select(i => views[(s, i)].transform)).ToList();
@@ -795,9 +776,10 @@ public partial class Game : MonoBehaviour
         float top = (Screen.height - safe.yMax) / k + 30, bottom = H - safe.y / k - 50;
         switch (menu)
         {
-            case Menu.Home: HomeScreen(W, H, k, top - 30, bottom); return;
-            case Menu.Map: MapScreen(W, H, top - 30, bottom); return;
-            case Menu.Catalog: CatalogScreen(W, H, top - 30); return;
+            case Menu.Home: HomeScreen(W, H, k, top - 30, bottom); TrophyBanner(W, top); return;
+            case Menu.Map: MapScreen(W, H, top - 30, bottom); TrophyBanner(W, top); return;
+            case Menu.Catalog: CatalogScreen(W, H, top - 30); TrophyBanner(W, top); return;
+            case Menu.Trophies: TrophyScreen(W, H, top - 30); return;
             case Menu.World: WorldScreen(W, H, top - 30, bottom); return;
         }
         bool live = !busy && !over && menu == Menu.None;
@@ -837,9 +819,7 @@ public partial class Game : MonoBehaviour
             moves > par ? new Color(1f, .75f, .75f) : Color.white, true, TextAnchor.MiddleRight);
 
         var boardTop = cam.WorldToScreenPoint(new Vector3(0, BoardTopY + .3f, 0));
-        if (Time.time < tipUntil && !over) TipCard(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20); // a new obstacle explained, in the sign's place
-        else if (customerId >= 0 && !over) CustomerCard(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20); // a customer waits, in the sign's place
-        else StoreFront(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20);
+        StoreFront(bar.yMax + 30, (Screen.height - boardTop.y) / k - 20);
 
         // bonuses
         // bonuses: icon + what it does; spent or unusable ones turn grey, the badge says how many are left
@@ -883,16 +863,8 @@ public partial class Game : MonoBehaviour
 
         if (over) EndCard(W, H, k);
         if (menu == Menu.Pause) PauseCard(W, H, k);
-    }
-
-    // "NOUVEAU !" card explaining an obstacle, filling the gap between the timer and the cabinets
-    void TipCard(float from, float to)
-    {
-        float h = Mathf.Clamp(to - from, 160, 240);
-        var card = new Rect(40, from + (to - from - h) / 2, 1000, h);
-        Panel(card, Ink);
-        Label(new Rect(card.x, card.y + 10, card.width, 50), "NOUVEAU !", 40, Gold);
-        Label(new Rect(card.x + 30, card.y + 58, card.width - 60, h - 70), tip, 36, Color.white);
+        else if (intros.Count > 0 && !over) IntroCard(W, H, k);
+        TrophyBanner(W, top);
     }
 
     // Shop sign + striped awning, centered in the gap between the timer and the cabinets.

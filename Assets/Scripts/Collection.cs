@@ -37,6 +37,7 @@ public partial class Game
             msg = $"Album {Worlds[w].name} complet ! +{AlbumCoins} pièces";
         }
         PlayerPrefs.Save();
+        CheckTrophies(); // a full album
         return msg;
     }
 }

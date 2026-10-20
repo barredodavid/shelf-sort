@@ -5,23 +5,25 @@ using UnityEngine;
 
 // Things that happen during a level, on top of the puzzle. None of them can make a level unsolvable: they hold
 // something back for a while, pay a bonus, or (the pigeon) make an ordinary move the player can undo.
-//  - A hurried customer (levels 11-20 of each country): now and then wants one product; the matching products are
-//    circled, and their trio within the time pays coins and seconds.
 //  - One twist per country, from its 6th level:
 //    France, the pigeon: lands on a product, which can't be taken until the pigeon is shooed off with a tap (a few
 //    coins and a second); left there too long, it flies off with the product and drops it on another shelf;
-//    Italy, the siesta: a shelf pulls down its shutter for a few seconds (nothing taken from it or put on it);
-//    Japan, sealed bentos: one or two products only open after 3 moves;
-//    USA, the flash sale: one product is half price for a few seconds, and its trio pays a bonus.
+//    Italy, the siesta: a shelf's steel shutter comes half down as a warning (a trio made there then pays), then shuts
+//    it for a few seconds (nothing taken from it or put on it);
+//    Japan, sealed bentos: one or two products stand tied up in a bento cloth, untied after 3 moves (coins when they
+//    open);
+//    USA, the flash sale: one product wears a blinking SALE tag for a few seconds, and its trio pays a bonus.
 public partial class Game
 {
-    const float CustomerTime = 15, PigeonTime = 4, PigeonFlight = 1.1f, SiestaTime = 4, SaleTime = 8;
-    const int CustomerCoins = 10, SaleCoins = 10, BentoMoves = 3, PigeonCoins = 3;
+    const float PigeonTime = 4, PigeonFlight = 1.1f, SiestaTime = 4, SaleTime = 8;
+    const int SaleCoins = 10, BentoMoves = 3, PigeonCoins = 3, BentoCoins = 5, SiestaCoins = 5;
+    const float SiestaWarning = 1.6f;
 
-    bool customers;
     int twist = -1; // the country whose twist runs in this level (-1: none)
-    int customerId = -1, saleId = -1, shutS = -1;
-    float customerUntil, nextCustomer, saleUntil, nextSale, shutUntil, nextShut, pigeonUntil, nextPigeon, pigeonLandAt;
+    int saleId = -1, shutS = -1, shutWarn = -1, shutUp = -1; // shut; about to shut; opening again
+    float saleUntil, nextSale, shutFrom, shutUntil, shutUpAt, nextShut, pigeonUntil, nextPigeon, pigeonLandAt;
+    Transform shutter3D; // the twists' models over the board, rebuilt if Render clears it
+    readonly Dictionary<(int s, int i), Transform> bentos3D = new(), tags3D = new();
     (int s, int i) pigeon = (-1, -1);
     Transform pigeon3D; // its model, standing on the product (rebuilt if Render clears the board)
     readonly Dictionary<(int s, int i), int> seals = new(); // sealed bentos: moves left before they open
@@ -29,13 +31,13 @@ public partial class Game
     // called at the end of StartLevel
     void StartEvents()
     {
-        customers = !daily && lvl >= 10;
         twist = !daily && lvl >= 5 ? world : -1;
-        customerId = saleId = shutS = -1;
+        saleId = shutS = shutWarn = shutUp = -1;
         pigeon = (-1, -1);
         seals.Clear();
+        bentos3D.Clear(); // last level's models went with the board
+        tags3D.Clear();
         float t = Time.time;
-        nextCustomer = t + 10;
         nextPigeon = t + 8;
         nextShut = t + 12;
         nextSale = t + 9;
@@ -56,26 +58,6 @@ public partial class Game
     void UpdateEvents()
     {
         float t = Time.time;
-        if (customers)
-        {
-            if (customerId >= 0 && t > customerUntil)
-            {
-                customerId = -1;
-                nextCustomer = t + 12;
-                Toast("Le client est parti...");
-            }
-            else if (customerId < 0 && t > nextCustomer)
-            {
-                var kinds = KindsLeft();
-                if (kinds.Count > 0)
-                {
-                    customerId = kinds[rng.Next(kinds.Count)];
-                    customerUntil = t + CustomerTime;
-                    Fx.Play("pick", 1.3f);
-                }
-                else nextCustomer = t + 5;
-            }
-        }
         switch (twist)
         {
             case 0: // the pigeon lands on a front product, and flies off on its own after a while
@@ -93,20 +75,32 @@ public partial class Game
                     }
                 }
                 break;
-            case 1: // siesta: a shelf shuts for a few seconds
-                if (shutS >= 0 && t > shutUntil)
+            case 1: // siesta: a shelf's shutter comes half down (a warning), then shuts it for a few seconds, then rolls up
+                if (shutWarn >= 0 && t > shutFrom)
                 {
+                    shutS = shutWarn;
+                    shutWarn = -1;
+                    shutUntil = t + SiestaTime;
+                    Toast("RIPOSO !");
+                    Fx.Play("back", .8f);
+                    Fx.Haptic(2);
+                }
+                else if (shutS >= 0 && t > shutUntil)
+                {
+                    shutUp = shutS;
+                    shutUpAt = t;
                     shutS = -1;
                     nextShut = t + 14;
+                    Fx.Play("pick", .8f);
                 }
-                else if (shutS < 0 && t > nextShut)
+                else if (shutS < 0 && shutWarn < 0 && t > nextShut)
                 {
                     var open = Enumerable.Range(0, shelves.Count).Where(s => !locked.Contains(s) && s != dragS && shelves[s][0].Any(x => x >= 0)).ToList();
                     if (open.Count > 0)
                     {
-                        shutS = open[rng.Next(open.Count)];
-                        shutUntil = t + SiestaTime;
-                        Toast("RIPOSO !");
+                        shutWarn = open[rng.Next(open.Count)];
+                        shutFrom = t + SiestaWarning;
+                        Toast("Ça va fermer !");
                         Fx.Play("back");
                     }
                 }
@@ -131,6 +125,92 @@ public partial class Game
                 break;
         }
         if (twist == 0) PlacePigeon();
+        if (twist == 1) PlaceShutter();
+        if (twist == 2) PlaceBentos();
+        if (twist == 3) PlaceTags();
+    }
+
+    // the shutter of the shelf in siesta: half down while it warns, slammed down when it shuts, rolled up after
+    void PlaceShutter()
+    {
+        int s = shutS >= 0 ? shutS : shutWarn >= 0 ? shutWarn : shutUp;
+        float t = Time.time, down = shutS >= 0 ? Mathf.Lerp(.45f, 1, Mathf.Clamp01((t - shutFrom) / .2f))
+            : shutWarn >= 0 ? .45f * Mathf.SmoothStep(0, 1, (t - shutFrom + SiestaWarning) / .5f)
+            : 1 - Mathf.Clamp01((t - shutUpAt) / .5f);
+        if (s < 0 || down <= 0)
+        {
+            if (shutter3D) Destroy(shutter3D.gameObject);
+            shutUp = -1;
+            return;
+        }
+        float height = rowH - .42f; // from the plank top to just under the shelf above, the roller box tucked beneath it
+        if (!shutter3D)
+        {
+            shutter3D = Products.Shutter(ShelfW, height).transform;
+            shutter3D.SetParent(root);
+        }
+        shutter3D.position = ShelfPos(s) + new Vector3(0, .11f + height, -.86f);
+        shutter3D.Find("curtain").localScale = new Vector3(1, height * down, 1);
+        var bar = shutter3D.Find("bar");
+        bar.localPosition = new Vector3(0, -height * down, 0);
+        bar.Find("sign").localRotation = Quaternion.Euler(0, 0, 8 * Mathf.Sin(t * 3)); // swinging
+    }
+
+    // each sealed product stands tied up in its bento cloth, the knot tugging a little more as the moves run out
+    void PlaceBentos()
+    {
+        foreach (var c in bentos3D.Keys.Where(c => !seals.ContainsKey(c)).ToList()) // opened, or popped with a trio
+        {
+            if (bentos3D[c]) StartCoroutine(OpenBento(bentos3D[c]));
+            bentos3D.Remove(c);
+        }
+        foreach (var (c, n) in seals)
+        {
+            if (!bentos3D.TryGetValue(c, out var box) || !box)
+            {
+                bentos3D[c] = box = Products.BentoWrap().transform;
+                box.SetParent(root);
+                box.SetPositionAndRotation(SlotPos(c.s, c.i) + new Vector3(0, 0, -.05f), Quaternion.identity);
+            }
+            box.Find("wrap").localScale = new Vector3(1, 1, 1 + .03f * (BentoMoves - n) * Mathf.Sin(Time.time * 8)); // straining
+        }
+    }
+
+    // opened: the cloth flies up spinning and the tray shrinks away
+    IEnumerator OpenBento(Transform box)
+    {
+        var wrap = box.Find("wrap");
+        for (float t = 0; t < .45f && box; t += Time.deltaTime)
+        {
+            wrap.localPosition += Vector3.up * 4 * Time.deltaTime;
+            wrap.localRotation = Quaternion.Euler(0, 600 * t, 0);
+            box.localScale = Vector3.one * (1 - t / .45f);
+            yield return null;
+        }
+        if (box) Destroy(box.gameObject);
+    }
+
+    // a SALE tag hanging over each front product on sale, swaying, its card blinking
+    void PlaceTags()
+    {
+        var want = FrontSlots().Where(c => LevelGen.IsProduct(shelves[c.s][0][c.i]) && !LevelGen.IsBoxed(shelves[c.s][0][c.i])
+            && LevelGen.Id(shelves[c.s][0][c.i]) == saleId).ToList();
+        foreach (var c in tags3D.Keys.Where(c => !want.Contains(c)).ToList())
+        {
+            if (tags3D[c]) Destroy(tags3D[c].gameObject);
+            tags3D.Remove(c);
+        }
+        float blink = Mathf.Repeat(Time.time * 2.5f, 1) < .5f ? .9f : .2f;
+        foreach (var c in want)
+        {
+            if (!tags3D.TryGetValue(c, out var tag) || !tag)
+            {
+                tags3D[c] = tag = Products.SaleTag().transform;
+                tag.SetParent(root);
+            }
+            tag.SetPositionAndRotation(SlotPos(c.s, c.i) + new Vector3(.25f, 1.55f, -.45f), Quaternion.Euler(0, 0, 10 * Mathf.Sin(Time.time * 2.4f + c.i)));
+            tag.Find("card").GetComponent<Renderer>().sharedMaterial.SetColor("_EmissionColor", new Color(1, .8f, .1f) * blink);
+        }
     }
 
     // the pigeon's model on top of its product, pecking now and then
@@ -202,6 +282,7 @@ public partial class Game
         {
             Fx.Play("drop", 2f);
             Reward(s, PigeonCoins, 1, $"Ouste ! +{PigeonCoins}");
+            Count("pigeons");
         }
     }
 
@@ -287,24 +368,27 @@ public partial class Game
             seals.Remove(c);
             Fx.Burst(SlotAim(c.s, c.i) + new Vector3(0, 0, -1), 15);
             Fx.Play("match", 1.6f);
+            Reward(c.s, BentoCoins, 1, $"BENTO OUVERT ! +{BentoCoins}");
+            Count("bento");
         }
     }
 
-    // a trio just made: the customer's or the sale's product pays
+    // a trio just made: a bento popped with it, the siesta beaten, the sale's product paid
     void TrioEvents(int s, int id)
     {
         seals.Keys.Where(c => c.s == s).ToList().ForEach(c => seals.Remove(c));
-        if (id == customerId)
+        if (s == shutWarn) // emptied a trio there before the shutter fell
         {
-            customerId = -1;
-            nextCustomer = Time.time + 10;
-            Reward(s, CustomerCoins, 5, "MERCI !");
+            Reward(s, SiestaCoins, 2, "JUSTE À TEMPS !");
+            Count("siesta");
         }
         if (id == saleId)
         {
             saleId = -1;
             nextSale = Time.time + 12;
             Reward(s, SaleCoins, 3, "PROMO ! x2");
+            Fx.Play("till");
+            Count("promo");
         }
     }
 
@@ -324,60 +408,31 @@ public partial class Game
 
     void DrawEvents(float k)
     {
-        // products the customer wants, or on sale: a pulsing ring under them, a "-50%" badge
-        float pulse = 1 + .08f * Mathf.Sin(Time.time * 6);
-        foreach (var (s, i) in FrontSlots())
-        {
-            int x = shelves[s][0][i];
-            if (!LevelGen.IsProduct(x) || LevelGen.IsBoxed(x)) continue;
-            var p = ToGui(SlotAim(s, i));
-            if (LevelGen.Id(x) == customerId)
+        // the words on the twists' 3D models: the sale tags' price cut, the tiers left on each bento, the shutter's board
+        foreach (var tag in tags3D.Values)
+            if (tag)
             {
-                GUI.color = new Color(1, .8f, .2f, .55f);
-                float r = 95 * pulse;
-                GUI.DrawTexture(new Rect(p.x - r, p.y - r, 2 * r, 2 * r), circle);
-                GUI.color = Color.white;
+                var p = ToGui(tag.Find("card").position);
+                Label(new Rect(p.x - 80, p.y - 30, 160, 60), "-50%", 34, Red);
             }
-            if (LevelGen.Id(x) == saleId)
+        foreach (var (c, n) in seals)
+            if (bentos3D.TryGetValue(c, out var box) && box)
             {
-                var b = new Rect(p.x + 20, p.y - 110, 96, 96);
-                GUI.color = Red;
-                GUI.DrawTexture(b, star ??= Fx.Star(128));
+                var p = ToGui(box.TransformPoint(new Vector3(.45f, 1.5f, -.5f))); // a badge by the knot: the moves left
+                GUI.color = Ink;
+                GUI.DrawTexture(new Rect(p.x - 38, p.y - 38, 76, 76), circle);
                 GUI.color = Color.white;
-                Label(b, "-50%", 28, Gold);
+                Label(new Rect(p.x - 38, p.y - 38, 76, 76), n.ToString(), 46, Color.white);
             }
-        }
-        // sealed bentos: a red lid tied over the product, the moves left on it
-        foreach (var ((s, i), n) in seals)
+        if (shutter3D)
         {
-            var p = ToGui(SlotAim(s, i));
-            var lid = new Rect(p.x - 70, p.y - 60, 140, 120);
-            Panel(lid, new Color(.78f, .12f, .12f, .85f));
-            Fill(new Rect(lid.center.x - 6, lid.y, 12, lid.height), Gold);
-            Label(lid, n.ToString(), 70, Color.white, true);
+            var sign = shutter3D.Find("bar/sign");
+            var p = ToGui(sign.TransformPoint(new Vector3(0, -.5f, -.03f)));
+            var m = GUI.matrix;
+            GUIUtility.RotateAroundPivot(-sign.localEulerAngles.z, new Vector2(p.x * k, p.y * k)); // swinging with its board
+            Label(new Rect(p.x - 150, p.y - 40, 300, 42), "TORNO SUBITO", 30, Ink);
+            Label(new Rect(p.x - 150, p.y + 2, 300, 40), shutS >= 0 ? $"{Mathf.CeilToInt(shutUntil - Time.time)} s" : "Chiude...", 30, Red);
+            GUI.matrix = m;
         }
-        // the siesta: a metal shutter down over the shelf's front, the seconds left
-        if (shutS >= 0)
-        {
-            Vector2 a = ToGui(SlotPos(shutS, 0) + new Vector3(-SlotW / 2, 1.35f, -.6f)), b = ToGui(SlotPos(shutS, 2) + new Vector3(SlotW / 2, 0, -.6f));
-            var r = new Rect(a.x, a.y, b.x - a.x, b.y - a.y);
-            Fill(r, new Color(.62f, .66f, .72f, .95f));
-            for (float y = r.y + 14; y < r.yMax; y += 22) Fill(new Rect(r.x, y, r.width, 4), new Color(.45f, .48f, .54f));
-            Label(new Rect(r.x, r.center.y - 50, r.width, 60), "RIPOSO", 44, Ink);
-            Label(new Rect(r.x, r.center.y + 4, r.width, 50), $"{Mathf.CeilToInt(shutUntil - Time.time)} s", 36, Ink);
-        }
-    }
-
-    // in the sign's place while a customer waits: who, what to do, the time left
-    void CustomerCard(float from, float to)
-    {
-        float h = Mathf.Clamp(to - from, 160, 240);
-        var card = new Rect(40, from + (to - from - h) / 2, 1000, h);
-        Panel(card, Cream);
-        Label(new Rect(card.x, card.y + 14, card.width, 60), "UN CLIENT PRESSÉ !", 48, Red, true);
-        Label(new Rect(card.x, card.y + 72, card.width, 50), "Fais le trio des produits entourés", 36, Ink);
-        var bar = new Rect(card.x + 60, card.yMax - 52, card.width - 120, 30);
-        Fill(bar, new Color(0, 0, 0, .15f));
-        Fill(new Rect(bar.x, bar.y, bar.width * Mathf.Clamp01((customerUntil - Time.time) / CustomerTime), bar.height), Gold);
     }
 }
