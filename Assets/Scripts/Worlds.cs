@@ -164,9 +164,9 @@ public partial class Game
         var next = new Rect(card.x + 60, card.yMax - 330, card.width - 120, 150);
         if (Button(next, "Suivant", Gold, 56))
         {
-            // back to the map, where the truck drives on to the next level and starts it
+            // back to the map, where the truck drives on to the next level and starts it (or to the airport)
             OpenMenu(Menu.Map);
-            driveThenPlay = truckGoal != (int)truckT;
+            driveThenPlay = lvl < LevelsPerWorld - 1 && truckGoal != truckT;
         }
         float half = (card.width - 150) / 2;
         if (Button(new Rect(card.x + 60, card.yMax - 150, half, 110), "Rejouer", Mist, 42)) PlayLevel(world, lvl);

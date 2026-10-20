@@ -160,6 +160,138 @@ public static partial class Products
         return root;
     }
 
+    // airport at the end of a country's road: tarmac, a terminal with a glass front, a control tower, and the plane
+    // for the next country waiting on the apron (tail in that country's colour). Centred on the road's end.
+    public static GameObject Airport(Color tail)
+    {
+        var root = new GameObject("Airport");
+        Part(root, Cube, Plain(C("#8a8f99"), .2f), new(0, .01f, 1.6f), scale: new(7.2f, .02f, 4.4f)); // tarmac
+        var white = Plain(C("#f4f4f2"), .4f);
+        var glass = Plain(C("#5a8fc2"), .9f);
+        // terminal on the left, the tower on the right
+        Part(root, Cube, white, new(-2.2f, .45f, 2.6f), scale: new(2.4f, .9f, 1.2f));
+        Part(root, Cube, glass, new(-2.2f, .48f, 1.99f), scale: new(2.2f, .42f, .02f));
+        Part(root, Cube, Plain(C("#c8cdd6"), .4f), new(-2.2f, .95f, 2.6f), scale: new(2.6f, .1f, 1.4f));
+        Part(root, Cylinder, white, new(2.4f, .9f, 2.8f), scale: new(.32f, .9f, .32f));
+        Part(root, Cylinder, glass, new(2.4f, 1.95f, 2.8f), scale: new(.6f, .15f, .6f));
+        Part(root, Cylinder, white, new(2.4f, 2.15f, 2.8f), scale: new(.68f, .05f, .68f));
+        // the plane, nose towards the player
+        var plane = Plain(Color.white, .6f);
+        Spin(root, Capsule(2.2f, .26f), plane, new(0, .45f, 2.9f), new(-90, 0, 0)); // fuselage along -Z
+        Part(root, Cube, plane, new(0, .4f, 1.75f), new(0, 0, 0), new(3.2f, .06f, .5f)); // wings
+        Part(root, Cube, plane, new(0, .5f, 2.75f), scale: new(1.2f, .05f, .3f)); // tailplane
+        Part(root, Cube, Plain(tail, .5f), new(0, .85f, 2.75f), scale: new(.06f, .6f, .4f)); // fin
+        var window = Plain(C("#2a3550"), .8f);
+        for (int i = 0; i < 6; i++)
+            foreach (float x in new[] { -.25f, .25f })
+                Part(root, Sphere, window, new(x, .52f, .95f + i * .22f), scale: new(.02f, .07f, .07f));
+        Part(root, Sphere, window, new(0, .58f, .88f), scale: new(.3f, .1f, .12f)); // cockpit, just behind the nose (z = .7)
+        return root;
+    }
+
+    // ---------- the world map's globe ----------
+
+    // Land on a 5° grid (36 rows from 90°N down, 72 columns from 180°W east): each row lists its runs of land
+    // columns. Coarse on purpose; Land() smooths it into believable coastlines.
+    static readonly string[] LandRows =
+    {
+        "26-29", "18-22,23-31,55-57", "12-21,22-32,39-40,55-59,64-66", "3-7,10-20,25-31,40-41,46-47,50-71",
+        "3-16,20-24,25-31,38-71", "3-17,20-23,26-28,31-33,37-71", "8-17,19-24,34-35,37-39,40-63,67-68",
+        "10-25,34-35,37-64", "11-25,35-44,47-63,64-65", "11-23,34-41,44-45,47-62,64-64",
+        "11-21,34-38,40-40,41-60,61-61,62-64", "12-20,34-60,62-62", "13-16,19-19,33-60", "14-16,19-21,32-47,49-60",
+        "15-18,21-22,32-46,50-52,55-58,60-61", "18-19,21-24,32-46,51-51,55-57,60-60", "20-26,33-46,52-52,56-56,58-59,61-61",
+        "20-26,37-44,55-56,58-60", "20-28,37-43,55-56,58-59,62-65", "20-28,38-43,57-58,62-65", "20-28,38-43,45-45,61-64",
+        "21-28,38-43,45-46,60-65", "22-27,38-42,45-46,58-66", "21-26,39-42,58-66", "21-25,39-41,59-60,63-66",
+        "21-24,64-65,70-71", "21-23,65-65,69-70", "21-22,69-69", "21-22", "", "23-24", "0-23,33-71", "0-24,32-71",
+        "4-25,30-67", "0-71", "0-71",
+    };
+
+    static bool[,] landGrid;
+
+    // 0..1 land amount at (lat, lon), bilinear over the grid
+    static float LandRaw(float lat, float lon)
+    {
+        if (landGrid == null)
+        {
+            landGrid = new bool[36, 72];
+            for (int r = 0; r < 36; r++)
+                foreach (var run in LandRows[r].Split(',', System.StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var ends = run.Split('-');
+                    for (int c = int.Parse(ends[0]); c <= int.Parse(ends[1]); c++) landGrid[r, c] = true;
+                }
+        }
+        float fr = Mathf.Clamp((90 - lat) / 5 - .5f, 0, 35), fc = (lon + 180) / 5 - .5f;
+        int r0 = Mathf.FloorToInt(fr), c0 = Mathf.FloorToInt(fc);
+        float tr = fr - r0, tc = fc - c0;
+        float Cell(int r, int c) => landGrid[Mathf.Clamp(r, 0, 35), ((c % 72) + 72) % 72] ? 1 : 0;
+        float v = Mathf.Lerp(Mathf.Lerp(Cell(r0, c0), Cell(r0, c0 + 1), tc), Mathf.Lerp(Cell(r0 + 1, c0), Cell(r0 + 1, c0 + 1), tc), tr);
+        return v;
+    }
+
+    // the grid softened (averaged over a few degrees around) and its coasts roughened by two octaves of noise
+    static float Land(float lat, float lon)
+    {
+        float sum = 0;
+        for (int i = -1; i <= 1; i++)
+            for (int j = -1; j <= 1; j++) sum += LandRaw(lat + i * 3, lon + j * 3);
+        float noise = (Mathf.PerlinNoise(lon * .1f + 50, lat * .1f + 50) - .5f) * .4f + (Mathf.PerlinNoise(lon * .4f + 9, lat * .4f + 9) - .5f) * .2f;
+        return sum / 9 + noise;
+    }
+
+    // the earth: oceans with shallow coasts, green land, deserts in the subtropics, ice near the poles
+    public static GameObject Globe(float r)
+    {
+        var cv = new Canvas(1024, 512);
+        cv.Paint((u, v) =>
+        {
+            float lat = Mathf.Asin(Mathf.Clamp(2 * v - 1, -1, 1)) * Mathf.Rad2Deg; // the lathe's v runs with height
+            float lon = Mathf.Repeat(u * 360 + 90 + 180, 360) - 180; // its u = 0 sits at longitude 90°
+            float land = Land(lat, lon), n = Mathf.PerlinNoise(lon * .2f, lat * .2f);
+            if (Mathf.Abs(lat) > 74) return Color.Lerp(C("#dfeaf2"), Color.white, n); // polar ice
+            if (land < .5f) return Color.Lerp(C("#2a63b0"), C("#4fa6dc"), Mathf.Clamp01((land - .1f) * 2.5f)); // deeper away from the coast
+            if (lat > 60 && lon > -60 && lon < -15 || Mathf.Abs(lat) > 68) return C("#eef4f8"); // Greenland and the high Arctic
+            if (Mathf.Abs(lat) > 61) return Color.Lerp(C("#8fae6a"), C("#7a9a5a"), n); // tundra
+            bool InBox(float la0, float la1, float lo0, float lo1) => lat > la0 && lat < la1 && lon > lo0 && lon < lo1;
+            float edge = (Mathf.PerlinNoise(lon * .15f, lat * .15f) - .5f) * 6; // ragged desert edges
+            bool desert = InBox(15 + edge, 33 + edge, -17, 60) || InBox(-32 + edge, -18 + edge, 118, 145) || InBox(24 + edge, 36 + edge, -118, -103) || InBox(38 + edge, 46 + edge, 90, 115); // Sahara-Arabia, Australia, US south-west, Gobi
+            return desert ? Color.Lerp(C("#d9bf86"), C("#c9a86a"), n) : Color.Lerp(C("#5fae46"), C("#3f8a35"), n);
+        });
+        var go = new GameObject("Globe");
+        Part(go, Lathe(Ball(r, 0, 1, 48), 96), Textured(cv, .35f), Vector3.zero);
+        return go;
+    }
+
+    // a little pin with the country's flag, standing on the globe (local +Y = outwards)
+    public static GameObject FlagPin(int w)
+    {
+        var root = new GameObject("Pin");
+        Part(root, Cylinder, Plain(Color.white, .5f), new(0, .22f, 0), scale: new(.035f, .22f, .035f));
+        var flag = Paint((u, v) => w switch
+        {
+            0 => u < .33f ? C("#2f5fd0") : u < .66f ? Color.white : C("#e3263a"),
+            1 => u < .33f ? C("#1f9a4a") : u < .66f ? Color.white : C("#e3263a"),
+            2 => new Vector2((u - .5f) * 1.5f, v - .5f).magnitude < .3f ? C("#d7282f") : Color.white,
+            _ => u < .42f && v > .46f ? C("#27407a") : (int)(v * 7) % 2 == 0 ? C("#c8282e") : Color.white,
+        }, .3f);
+        Part(root, Cube, flag, new(.16f, .36f, 0), scale: new(.3f, .2f, .02f));
+        Part(root, Sphere, Plain(C("#e8b84a"), .7f), new(0, .45f, 0), scale: Vector3.one * .06f);
+        return root;
+    }
+
+    // a small airliner for the world map: nose along +Y, its top facing -Z, a stripe in the country's colour
+    public static GameObject Plane(Color stripe)
+    {
+        var root = new GameObject("Plane");
+        var white = Plain(Color.white, .6f);
+        Spin(root, Capsule(.9f, .1f), white, new(0, -.45f, 0));
+        Part(root, Cube, white, new(0, .05f, 0), scale: new(.9f, .16f, .03f)); // wings
+        Part(root, Cube, white, new(0, -.36f, 0), scale: new(.36f, .08f, .03f)); // tailplane
+        Part(root, Cube, Plain(stripe, .5f), new(0, -.36f, -.08f), scale: new(.03f, .12f, .14f)); // fin
+        Part(root, Cube, Plain(stripe, .5f), new(0, 0, -.09f), scale: new(.06f, .5f, .02f)); // stripe along the top
+        return root;
+    }
+
     // orange traffic cone with a white band
     public static GameObject Cone()
     {

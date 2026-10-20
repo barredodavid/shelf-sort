@@ -1,73 +1,88 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Level map: a 3D diorama, built far from the board (MapO) and filmed from above by the main camera. One winding
-// road runs through every world, level 1 at the near end. A delivery truck waits at the current level, drives on
-// to the next one after a win ("Suivant"), and drives to any open level the player taps before starting it.
-// Each world has its own ground and decor and a gate at its start; a locked world's gate is barred.
-// The level numbers, stars and signs' text are GUI drawn over the 3D pads (MapScreen).
-// t = global level index, fractional between levels; MapPos(t) = the point of the road at t.
+// Country map: a 3D diorama of one country (mapWorld), built far from the board (MapO) and filmed from above by the
+// main camera. Its road starts at the country's gate, by its monument, runs past its 20 shops (one per level) and
+// ends at the airport, where the plane leaves for the next country (WorldMap.cs); the last country ends on works.
+// A delivery truck waits at the current level, drives on to the next one after a win, and drives to any open level
+// the player taps before starting it. Level numbers, stars and signs' text are GUI drawn over the 3D scene.
+// t = global level index (world * 20 + level), fractional between levels; MapPos(t) = the point of the road at t.
 public partial class Game
 {
-    const float NodeGap = 200, WorldGap = 420; // spacing along the road, in map units: a world gate adds a gap
-    const float MapScale = 3f / NodeGap; // world units per map unit
+    const float NodeGap = 3; // road length between two levels, in world units
     const float MapTilt = 42; // the map camera looks down this steeply
     static readonly Vector3 MapO = new(2000, 0, 0); // well away from the board
 
-    float scrollZ, mapVel, truckT, truckYaw, wheelSpin, playAt, pressMoved;
-    int truckGoal, nextLevel, truckWorld = -1;
+    int mapWorld; // the country shown
+    float scrollZ, mapVel, truckT, truckGoal, truckYaw, wheelSpin, playAt, pressMoved, tripFrom, tripStart, tripDur = 1;
+    int nextLevel, truckWorld = -1;
     bool driveThenPlay, pressing;
     Vector2 lastPress;
     Transform mapRoot, truck3D;
     readonly List<Transform> pads = new();
 
-    // star totals read every level's prefs: computed once when the map opens, not on every GUI event
+    // star totals read every level's prefs: computed when a map opens, not on every GUI event
     readonly bool[] openWorlds = new bool[Worlds.Length];
     int mapStars;
 
     static int TotalLevels => Worlds.Length * LevelsPerWorld;
 
-    static float MapY(float t)
-    {
-        float y = t * NodeGap;
-        for (int w = 1; w < Worlds.Length; w++) y += WorldGap * Mathf.Clamp01(t - (w * LevelsPerWorld - 1)); // room for the gate
-        return y;
-    }
+    static Vector3 MapPos(float t) => MapO + new Vector3(1.1f * Mathf.Sin(t * .6f), 0, t * NodeGap);
 
-    static Vector3 MapPos(float t) => MapO + new Vector3(1.1f * Mathf.Sin(t * .6f), 0, MapY(t) * MapScale);
-
-    static float GateT(int w) => w == 0 ? -1.1f : w * LevelsPerWorld - .5f;
+    // this country's stretch of road: gate a little before level 1, airport a little after level 20
+    float First => mapWorld * LevelsPerWorld;
+    float Last => First + LevelsPerWorld - 1;
+    float GateT => First - 1.1f;
+    float AirportT => Last + 1.6f;
+    bool LastCountry => mapWorld == Worlds.Length - 1;
 
     static float Hash01(int a, int b) => Mathf.Abs(Mathf.Sin(a * 12.9898f + b * 78.233f) * 43758.5453f) % 1;
 
     // every country and every level is open while testing in the editor (see also openWorlds)
     bool Reachable(int g) => openWorlds[g / LevelsPerWorld] && (LevelOpen(g / LevelsPerWorld, g % LevelsPerWorld) || Application.isEditor);
 
-    // the truck parks just short of its level's pad, so the pad and its number stay in view
+    void RefreshStars()
+    {
+        mapStars = TotalStars;
+        for (int w = 0; w < Worlds.Length; w++) openWorlds[w] = mapStars >= Worlds[w].need || Application.isEditor;
+    }
+
     Vector3 TruckPos(float t) => MapPos(t);
 
-    // a level's pad stands beside the road: the truck parks right next to it
+    // a level's shop stands beside the road, alternating sides: the truck parks right next to it
     static Vector3 PadPos(int g)
     {
         var d = MapPos(g + .05f) - MapPos(g - .05f);
         var right = new Vector3(d.z, 0, -d.x).normalized;
-        return MapPos(g) + right * (g % 2 == 0 ? 1.95f : -1.95f); // alternating sides: neighbors never crowd
+        return MapPos(g) + right * (g % 2 == 0 ? 1.95f : -1.95f);
     }
 
     float CenterZ(float t) => MapPos(t).z + 1.2f; // scroll that keeps t a little below the middle of the screen
 
+    // first level of country w not finished yet (its last level when all are done)
+    int FirstToPlay(int w)
+    {
+        for (int l = 0; l < LevelsPerWorld; l++)
+            if (!Done(w, l)) return l;
+        return LevelsPerWorld - 1;
+    }
+
     void EnterMap()
     {
-        mapStars = TotalStars;
-        for (int w = 0; w < Worlds.Length; w++) openWorlds[w] = mapStars >= Worlds[w].need || Application.isEditor;
+        RefreshStars();
+        mapWorld = world;
         int cur = world * LevelsPerWorld + lvl;
         truckT = truckGoal = cur;
         driveThenPlay = false;
         playAt = 0;
-        // after a win the truck moves on by itself
-        if (Done(world, lvl) && cur + 1 < TotalLevels && Reachable(cur + 1)) truckGoal = cur + 1;
-        nextLevel = -1; // first open level not finished yet: its pad gently pulses
-        for (int g = 0; g < TotalLevels && nextLevel < 0; g++)
+        // after a win the truck moves on by itself: to the next shop, or to the airport after the country's last one
+        if (Done(world, lvl))
+        {
+            if (lvl < LevelsPerWorld - 1 && Reachable(cur + 1)) DriveTo(cur + 1, false);
+            else if (lvl == LevelsPerWorld - 1 && !LastCountry) DriveTo(AirportT - .6f, false);
+        }
+        nextLevel = -1; // first open level of this country not finished yet: its shop gently pulses
+        for (int g = (int)First; g <= Last && nextLevel < 0; g++)
             if (Reachable(g) && !Done(g / LevelsPerWorld, g % LevelsPerWorld)) nextLevel = g;
         mapVel = 0;
         scrollZ = CenterZ(truckT);
@@ -84,95 +99,79 @@ public partial class Game
         pads.Clear();
         truck3D = null;
         truckWorld = -1;
-
-        // ground: one slab per world, from its gate to the next
-        for (int w = 0; w < Worlds.Length; w++)
-        {
-            float z0 = w == 0 ? MapPos(-6).z : MapPos(GateT(w)).z, z1 = w == Worlds.Length - 1 ? MapPos(TotalLevels + 8).z : MapPos(GateT(w + 1)).z;
-            Products.Place(mapRoot, Products.Cube, Products.Ground(w), new Vector3(MapO.x, -.1f, (z0 + z1) / 2), default, new Vector3(30, .2f, z1 - z0), .1f);
-        }
-
-        // road: white kerbs, asphalt, dashed middle line
-        var pts = new List<Vector3>();
-        for (float t = -3; t <= TotalLevels + .5f; t += .05f) pts.Add(MapPos(t));
+        int w = mapWorld;
         Vector3 Up(float y) => new(0, y, 0);
-        // sidewalks along the road, in each country's paving: Paris stone, terracotta, gravel, concrete
+
+        // ground
+        float z0 = MapPos(First - 7).z, z1 = MapPos(AirportT + 8).z;
+        Products.Place(mapRoot, Products.Cube, Products.Ground(w), new Vector3(MapO.x, -.1f, (z0 + z1) / 2), default, new Vector3(30, .2f, z1 - z0), .1f);
+
+        // road: sidewalks in the country's paving, white kerbs, asphalt, dashed middle line
+        var pts = new List<Vector3>();
+        for (float t = First - 3; t <= AirportT; t += .05f) pts.Add(MapPos(t));
         string[] paving = { "#e6dccb", "#e8c9a4", "#d3cec2", "#d9d9d6" };
-        for (int w = 0; w < Worlds.Length; w++)
-        {
-            float t0 = w == 0 ? -3 : GateT(w), t1 = w == Worlds.Length - 1 ? TotalLevels + .5f : GateT(w + 1);
-            var side = new List<Vector3>();
-            for (float t = t0; t <= t1 + .01f; t += .05f) side.Add(MapPos(t));
-            Products.Place(mapRoot, Products.Ribbon(side, 2.7f), C2(paving[w]), Up(.005f), smooth: .1f);
-        }
+        Products.Place(mapRoot, Products.Ribbon(pts, 2.7f), C2(paving[w]), Up(.005f), smooth: .1f);
         Products.Place(mapRoot, Products.Ribbon(pts, 1.35f), C2("#fbf8f0"), Up(.01f));
         Products.Place(mapRoot, Products.Ribbon(pts, 1.1f), C2("#5a5f6c"), Up(.02f), smooth: .15f);
         Products.Place(mapRoot, Products.Ribbon(pts, .09f, i => i % 6 < 3), Color.white, Up(.03f));
 
-        // level pads
-        for (int g = 0; g < TotalLevels; g++)
+        // one shop per level
+        for (int g = (int)First; g <= Last; g++)
         {
-            int w = g / LevelsPerWorld, l = g % LevelsPerWorld;
+            int l = g % LevelsPerWorld;
             bool open = Reachable(g), tough = (l + 1) % 5 == 0; // every 5th level is HARD (LevelGen.Generate)
             var awning = !open ? new Color(.62f, .66f, .72f) : tough ? (w == 2 ? Ink : Red) : Worlds[w].color; // Japan is already red
             var pad = Products.Shop(w, awning, open).transform;
             pad.SetParent(mapRoot);
             pad.position = PadPos(g);
-            Products.Place(mapRoot, Products.Ribbon(new[] { MapPos(g), PadPos(g) }, .55f), C2("#fbf8f0"), new Vector3(0, .015f, 0)); // driveway
+            Products.Place(mapRoot, Products.Ribbon(new[] { MapPos(g), PadPos(g) }, .55f), C2("#fbf8f0"), Up(.015f)); // driveway
             pads.Add(pad);
         }
 
-        // world gates, barred while the world is locked
-        for (int w = 0; w < Worlds.Length; w++)
+        // the country's gate, and its monument beside the start of the road
+        var gate = Products.Gate(Worlds[w].color, MapTilt).transform;
+        gate.SetParent(mapRoot);
+        gate.position = new Vector3(MapPos(GateT).x, 0, MapPos(GateT).z);
+        var lp = MapPos(First - 2.4f);
+        var landmark = new Vector3(MapO.x + (lp.x > MapO.x ? -1 : 1) * 2.6f, 0, lp.z);
+        var lm = Products.Landmark(w).transform;
+        lm.SetParent(mapRoot);
+        lm.position = landmark;
+        if (w == 2) lm.localScale = Vector3.one * .65f; // Fuji is wide
+
+        // end of the road: the airport to the next country, or works until the next country ships
+        if (!LastCountry)
         {
-            var gate = Products.Gate(Worlds[w].color, MapTilt).transform;
-            gate.SetParent(mapRoot);
-            gate.position = new Vector3(MapPos(GateT(w)).x, 0, MapPos(GateT(w)).z);
-            if (openWorlds[w]) continue;
-            var bar = Products.Barrier().transform;
-            bar.SetParent(mapRoot);
-            bar.position = gate.position + new Vector3(0, 0, -.5f);
+            var port = Products.Airport(Worlds[w + 1].color).transform;
+            port.SetParent(mapRoot);
+            port.position = new Vector3(MapO.x, 0, MapPos(AirportT).z);
+        }
+        else
+        {
+            var end = Products.Barrier().transform;
+            end.SetParent(mapRoot);
+            end.position = MapPos(Last + .65f);
+            for (int k = 0; k < 3; k++)
+            {
+                var cone = Products.Cone().transform;
+                cone.SetParent(mapRoot);
+                cone.position = MapPos(Last + .9f + k * .2f) + new Vector3((k - 1) * .4f, 0, 0);
+            }
         }
 
-        // each country's monument, just past its gate (before the start for the first), on the side away from the road
-        var landmarks = new List<Vector3>();
-        for (int w = 0; w < Worlds.Length; w++)
-        {
-            float t = w == 0 ? -2.3f : GateT(w) + .1f; // beside the gate: the first shop stands ~4.6 further on
-            var p = MapPos(t);
-            var at = new Vector3(MapO.x + (p.x > MapO.x ? -1 : 1) * (w == 0 ? 2.5f : 3f), 0, p.z);
-            var lm = Products.Landmark(w).transform;
-            lm.SetParent(mapRoot);
-            lm.position = at;
-            if (w == 2) lm.localScale = Vector3.one * .65f; // Fuji is wide
-            landmarks.Add(at);
-        }
-
-        // end of the road: works in progress until the next country ships
-        var end = Products.Barrier().transform;
-        end.SetParent(mapRoot);
-        end.position = MapPos(TotalLevels - .35f);
-        for (int k = 0; k < 3; k++)
-        {
-            var cone = Products.Cone().transform;
-            cone.SetParent(mapRoot);
-            cone.position = MapPos(TotalLevels - .1f + k * .2f) + new Vector3((k - 1) * .4f, 0, 0);
-        }
-
-        // decor on both sides, kept clear of the road
-        for (float t = -4; t < TotalLevels + 6; t += .45f)
+        // decor on both sides, kept clear of the road, the shops, the monument and the airport
+        for (float t = First - 6; t < AirportT + 6; t += .45f)
             for (int side = 0; side < 2; side++)
             {
                 int k = Mathf.RoundToInt(t * 10);
-                float r = Hash01(k, side);
-                if (r < .35f) continue;
+                if (Hash01(k, side) < .35f) continue;
                 var p = MapPos(t);
                 float x = MapO.x + (side == 0 ? -1 : 1) * (2.4f + 1.6f * Hash01(k, side + 7));
                 if (Mathf.Abs(x - p.x) < 2.4f || Mathf.Abs(x - MapPos(t + .4f).x) < 2.4f || Mathf.Abs(x - MapPos(t - .4f).x) < 2.4f) continue;
-                int near = Mathf.Clamp(Mathf.RoundToInt(t), 0, TotalLevels - 1);
-                if (Vector2.Distance(new Vector2(x, p.z), new Vector2(PadPos(near).x, PadPos(near).z)) < 1.9f) continue; // clear of the pads
-                if (landmarks.Exists(m => Vector2.Distance(new Vector2(x, p.z), new Vector2(m.x, m.z)) < 2.8f)) continue; // and of the monuments
-                int w = Mathf.Clamp(Mathf.FloorToInt((t + .5f) / LevelsPerWorld), 0, Worlds.Length - 1);
+                int near = (int)Mathf.Clamp(Mathf.Round(t), First, Last);
+                if (Vector2.Distance(new Vector2(x, p.z), new Vector2(PadPos(near).x, PadPos(near).z)) < 1.9f) continue;
+                if (Vector2.Distance(new Vector2(x, p.z), new Vector2(landmark.x, landmark.z)) < 2.8f) continue;
+                if (!LastCountry && Mathf.Abs(p.z - MapPos(AirportT).z) < 3.5f) continue;
                 var d = Products.Decor(w, Hash01(k, side + 3)).transform;
                 d.SetParent(mapRoot);
                 d.position = new Vector3(x, 0, p.z + (Hash01(k, side + 5) - .5f) * .6f);
@@ -194,24 +193,26 @@ public partial class Game
         {
             playAt = 0;
             driveThenPlay = false;
-            PlayLevel(truckGoal / LevelsPerWorld, truckGoal % LevelsPerWorld);
+            int g = Mathf.RoundToInt(truckGoal);
+            PlayLevel(g / LevelsPerWorld, g % LevelsPerWorld);
             return;
         }
 
         bool moving = truckT != truckGoal, busyTruck = moving || playAt > 0;
         if (moving)
         {
-            float d = truckGoal - truckT;
-            float speed = Mathf.Max(1.6f, Mathf.Abs(d) * 2.5f); // levels per second: long trips go faster
-            truckT = Mathf.MoveTowards(truckT, truckGoal, speed * dt);
-            wheelSpin += speed * 2.2f / (2 * Mathf.PI * .2f) * 360 * dt; // roll without sliding
-            var ahead = (TruckPos(truckT + .05f * Mathf.Sign(d)) - TruckPos(truckT)).normalized;
-            truckYaw = Mathf.LerpAngle(truckYaw, Mathf.Atan2(-ahead.z, ahead.x) * Mathf.Rad2Deg, 12 * dt);
+            // eased trip: smooth start and stop, duration set by DriveTo
+            float before = truckT, dir = Mathf.Sign(truckGoal - tripFrom);
+            float p = Mathf.Clamp01((Time.time - tripStart) / tripDur);
+            truckT = p >= 1 ? truckGoal : Mathf.Lerp(tripFrom, truckGoal, Mathf.SmoothStep(0, 1, p));
+            wheelSpin += Mathf.Abs(truckT - before) * NodeGap / (2 * Mathf.PI * .2f) * 360; // roll without sliding
+            var ahead = (TruckPos(truckT + .05f * dir) - TruckPos(truckT)).normalized;
+            truckYaw = Mathf.LerpAngle(truckYaw, Mathf.Atan2(-ahead.z, ahead.x) * Mathf.Rad2Deg, 10 * dt);
             scrollZ = Mathf.Lerp(scrollZ, CenterZ(truckT), 6 * dt);
             if (truckT == truckGoal)
             {
                 Fx.Play("drop");
-                if (driveThenPlay) playAt = Time.time + .35f;
+                if (driveThenPlay) playAt = Time.time + .6f; // a beat at the door before the level starts
             }
         }
 
@@ -238,14 +239,14 @@ public partial class Game
         {
             pressing = false;
             if (pressMoved < 25 && !busyTruck) TapMap(pos);
-            if (menu != Menu.Map) return; // the tap started a level: leave the camera to the board
+            if (menu != Menu.Map) return; // the tap left the map: leave the camera alone
         }
         else if (!busyTruck)
         {
             scrollZ += mapVel * dt;
             mapVel *= Mathf.Pow(.04f, dt);
         }
-        scrollZ = Mathf.Clamp(scrollZ, CenterZ(0), CenterZ(TotalLevels - 1));
+        scrollZ = Mathf.Clamp(scrollZ, CenterZ(First - 1.5f), CenterZ(LastCountry ? Last + 1 : AirportT - .5f));
 
         // camera
         var rot = Quaternion.Euler(MapTilt, 0, 0);
@@ -253,21 +254,20 @@ public partial class Game
         cam.orthographicSize = 3.8f / cam.aspect;
 
         // the next level to play breathes
-        for (int g = 0; g < pads.Count; g++)
+        for (int i = 0; i < pads.Count; i++)
         {
-            float s = g == nextLevel ? 1 + .07f * Mathf.Sin(Time.time * 5) : 1;
-            pads[g].localScale = Vector3.one * s;
+            float s = First + i == nextLevel ? 1 + .07f * Mathf.Sin(Time.time * 5) : 1;
+            pads[i].localScale = Vector3.one * s;
         }
 
-        // truck: rebuilt with the color of the world it drives through
-        int tw = Mathf.Clamp((int)(truckT + .5f) / LevelsPerWorld, 0, Worlds.Length - 1);
-        if (!truck3D || truckWorld != tw)
+        // truck, striped in the country's colour
+        if (!truck3D || truckWorld != mapWorld)
         {
             if (truck3D) Destroy(truck3D.gameObject);
-            truck3D = Products.Truck(Worlds[tw].color).transform;
+            truck3D = Products.Truck(Worlds[mapWorld].color).transform;
             truck3D.SetParent(mapRoot);
             truck3D.localScale = Vector3.one * .6f;
-            truckWorld = tw;
+            truckWorld = mapWorld;
         }
         float bob = moving ? .03f * Mathf.Abs(Mathf.Sin(Time.time * 18)) : 0;
         truck3D.SetPositionAndRotation(TruckPos(truckT) + new Vector3(0, bob, 0), Quaternion.Euler(0, truckYaw, 0));
@@ -292,8 +292,13 @@ public partial class Game
     void TapMap(Vector2 screen)
     {
         var p = new Vector2(screen.x / GuiScale, (Screen.height - screen.y) / GuiScale);
-        if (p.y < SafeTopPx() + 150 || p.y > Screen.height / GuiScale - SafeBottomPx() - 230) return; // header and the JOUER button
-        for (int g = 0; g < TotalLevels; g++)
+        if (p.y < SafeTopPx() + 150 || p.y > Screen.height / GuiScale - SafeBottomPx() - 230) return; // header and the bottom button
+        if (!LastCountry && Vector2.Distance(p, ToGui(new Vector3(MapO.x, .8f, MapPos(AirportT).z))) < 180)
+        {
+            TakeOff();
+            return;
+        }
+        for (int g = (int)First; g <= Last; g++)
         {
             if (Vector2.Distance(p, ToGui(PadPos(g) + new Vector3(0, .6f, 0))) > 110) continue;
             if (!Reachable(g))
@@ -302,15 +307,33 @@ public partial class Game
                 return;
             }
             Fx.Play("pick");
-            if (g == (int)truckT) PlayLevel(g / LevelsPerWorld, g % LevelsPerWorld);
-            else
-            {
-                truckGoal = g;
-                driveThenPlay = true;
-                mapVel = 0;
-            }
+            DriveTo(g, true);
             return;
         }
+    }
+
+    // to the world map, the plane leaving for the next country if it is open
+    void TakeOff()
+    {
+        Fx.Play("pick");
+        OpenWorldMap(openWorlds[mapWorld + 1] ? mapWorld + 1 : -1);
+    }
+
+    // Sends the truck to t (a level, or a point of the road): an eased trip of about a second nearby, 2.5 s at most
+    // from far away. play: start the level once parked (after a short beat, also when the truck is already there).
+    void DriveTo(float t, bool play)
+    {
+        driveThenPlay = play;
+        mapVel = 0;
+        if (truckT == t)
+        {
+            if (play) playAt = Time.time + .6f;
+            return;
+        }
+        tripFrom = truckT;
+        truckGoal = t;
+        tripStart = Time.time;
+        tripDur = Mathf.Clamp(.7f + .15f * Mathf.Abs(t - truckT), .9f, 2.5f);
     }
 
     // ---------- GUI over the 3D map ----------
@@ -319,38 +342,37 @@ public partial class Game
     {
         if (!mapRoot) return;
 
-        // world names on the gates' boards, lock condition in front of a barred gate
-        for (int w = 0; w < Worlds.Length; w++)
-        {
-            var board = ToGui(new Vector3(MapPos(GateT(w)).x, 2.05f, MapPos(GateT(w)).z));
-            if (board.y < -200 || board.y > H + 200) continue;
-            Label(new Rect(board.x - 200, board.y - 62, 400, 50), $"PAYS {w + 1}", 34, Color.white, true);
-            Label(new Rect(board.x - 200, board.y - 18, 400, 70), Worlds[w].name.ToUpper(), 52, Color.white, true);
-            if (openWorlds[w]) continue;
-            var at = ToGui(new Vector3(MapPos(GateT(w)).x, 0, MapPos(GateT(w)).z - 1.4f));
-            var lockTag = new Rect(at.x - 210, at.y - 40, 420, 80);
-            Panel(lockTag, Ink);
-            Star(new Rect(lockTag.x + 22, lockTag.y + 12, 56, 56), true);
-            Label(new Rect(lockTag.x + 85, lockTag.y, lockTag.width - 100, 80), $"{Worlds[w].need} pour ouvrir", 38, Color.white);
-        }
+        // country name on the gate's board
+        var board = ToGui(new Vector3(MapPos(GateT).x, 2.05f, MapPos(GateT).z));
+        Label(new Rect(board.x - 200, board.y - 62, 400, 50), $"PAYS {mapWorld + 1}", 34, Color.white, true);
+        Label(new Rect(board.x - 200, board.y - 18, 400, 70), Worlds[mapWorld].name.ToUpper(), 52, Color.white, true);
 
-        // the works at the end of the road
-        var soon = ToGui(MapPos(TotalLevels + .15f) + new Vector3(0, 1, 0));
-        if (soon.y > -150 && soon.y < H + 150)
+        // airport sign, or the works at the end of the last country
+        var endSign = ToGui(MapPos(LastCountry ? Last + 1.15f : AirportT) + new Vector3(0, LastCountry ? 1 : 2.2f, 0));
+        if (endSign.y > -150 && endSign.y < H + 150)
         {
-            var sign = new Rect(soon.x - 280, soon.y - 70, 560, 140);
+            var sign = new Rect(endSign.x - 280, endSign.y - 70, 560, 140);
             Panel(new Rect(sign.x, sign.y + 12, sign.width, sign.height), Darker(Gold));
             Panel(sign, Gold);
-            Label(new Rect(sign.x, sign.y + 10, sign.width, 60), "PROCHAIN PAYS", 48, Ink);
-            Label(new Rect(sign.x, sign.y + 70, sign.width, 50), "BIENTÔT !", 40, Red);
+            if (LastCountry)
+            {
+                Label(new Rect(sign.x, sign.y + 10, sign.width, 60), "PROCHAIN PAYS", 48, Ink);
+                Label(new Rect(sign.x, sign.y + 70, sign.width, 50), "BIENTÔT !", 40, Red);
+            }
+            else
+            {
+                Label(new Rect(sign.x, sign.y + 10, sign.width, 60), "AÉROPORT", 48, Ink);
+                Label(new Rect(sign.x, sign.y + 70, sign.width, 50), openWorlds[mapWorld + 1]
+                    ? $"Vols pour : {Worlds[mapWorld + 1].name}" : $"{Worlds[mapWorld + 1].name} : {Worlds[mapWorld + 1].need} étoiles", 36, Ink);
+            }
         }
 
         // numbers on the shops' signs, "DUR" above hard ones, stars under finished ones
-        for (int g = 0; g < TotalLevels; g++)
+        for (int g = (int)First; g <= Last; g++)
         {
-            var c = ToGui(PadPos(g) + new Vector3(0, Products.SignY(g / LevelsPerWorld), -.48f)); // the shop's sign
+            var c = ToGui(PadPos(g) + new Vector3(0, Products.SignY(mapWorld), -.48f)); // the shop's sign
             if (c.y < -150 || c.y > H + 150) continue;
-            int w = g / LevelsPerWorld, l = g % LevelsPerWorld;
+            int l = g % LevelsPerWorld;
             bool open = Reachable(g), tough = (l + 1) % 5 == 0;
             Label(new Rect(c.x - 80, c.y - 34, 160, 70), (l + 1).ToString(), 48,
                 !open ? new Color(.55f, .6f, .66f) : tough ? Red : Ink);
@@ -360,14 +382,14 @@ public partial class Game
                 Panel(tag, Ink);
                 Label(tag, "DUR", 28, Color.white);
             }
-            if (!Done(w, l)) continue;
+            if (!Done(mapWorld, l)) continue;
             var front = ToGui(PadPos(g) + new Vector3(0, 0, -.8f)); // the pavement's front edge
             var pill = new Rect(front.x - 96, front.y + 4, 192, 64); // stars on a dark pill, so gold reads on any ground
             Panel(pill, new Color(Ink.r, Ink.g, Ink.b, .85f));
             for (int k = 0; k < 3; k++)
             {
                 var sr = new Rect(pill.x + 10 + k * 58, pill.y + 4, 56, 56);
-                if (k < Stars(w, l)) Star(sr, true);
+                if (k < Stars(mapWorld, l)) Star(sr, true);
                 else
                 {
                     GUI.color = new Color(1, 1, 1, .22f);
@@ -377,36 +399,31 @@ public partial class Game
             }
         }
 
-        // "you are here": a bouncing tag over the next level to play, and a big button that drives there and starts it
+        // "you are here": a bouncing tag over the next level, and the big button: play it, or fly on
+        bool busyTruck = truckT != truckGoal || playAt > 0;
+        var play = new Rect(140, bottom - 160, W - 280, 150);
+        GUI.enabled = !busyTruck;
         if (nextLevel >= 0)
         {
-            var c = ToGui(PadPos(nextLevel) + new Vector3(0, Products.SignY(nextLevel / LevelsPerWorld), -.48f));
+            var c = ToGui(PadPos(nextLevel) + new Vector3(0, Products.SignY(mapWorld), -.48f));
             float hop = 14 * Mathf.Abs(Mathf.Sin(Time.time * 4));
             var tag = new Rect(c.x - 85, c.y - ((nextLevel % LevelsPerWorld + 1) % 5 == 0 ? 150 : 110) - hop, 170, 70);
             Panel(new Rect(tag.x, tag.y + 8, tag.width, tag.height), Darker(Gold));
             Panel(tag, Gold);
             Label(tag, "À TOI !", 36, Ink);
-
-            var play = new Rect(140, bottom - 160, W - 280, 150);
-            bool busyTruck = truckT != truckGoal || playAt > 0;
-            GUI.enabled = !busyTruck;
-            if (Button(play, $"JOUER  {nextLevel / LevelsPerWorld + 1}-{nextLevel % LevelsPerWorld + 1}", Gold, 60))
+            if (Button(play, $"JOUER  {mapWorld + 1}-{nextLevel % LevelsPerWorld + 1}", Gold, 60))
             {
                 Fx.Play("pick");
-                if (nextLevel == (int)truckT && truckT == truckGoal) PlayLevel(nextLevel / LevelsPerWorld, nextLevel % LevelsPerWorld);
-                else
-                {
-                    truckGoal = nextLevel;
-                    driveThenPlay = true;
-                    mapVel = 0;
-                }
+                DriveTo(nextLevel, true);
             }
-            GUI.enabled = true;
         }
+        else if (!LastCountry && Button(play, $"VERS {Worlds[mapWorld + 1].name.ToUpper()}", Gold, 56)) TakeOff();
+        GUI.enabled = true;
 
-        // header: back and star count, no awning: the map has its own scenery
+        // header: back, the world map, star count
         float hy = safeTop + 40;
         if (Button(new Rect(40, hy, 250, 96), "Retour", Mist, 40)) OpenMenu(Menu.Home);
+        if (Button(new Rect(W / 2 - 125, hy, 250, 96), "Monde", Mist, 40)) OpenWorldMap(-1);
         StarCount(W - 290, hy, mapStars);
     }
 }

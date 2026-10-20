@@ -228,14 +228,20 @@ public partial class Game : MonoBehaviour
 
     void Render()
     {
+        if (homeDemo != null) StopCoroutine(homeDemo); // the title-screen demo animates objects about to go
         foreach (Transform c in root) Destroy(c.gameObject);
         views.Clear();
-        heroes.Clear();
         FitCamera();
-        if (menu != Menu.Map) cam.transform.SetPositionAndRotation(CamHome, Quaternion.Euler(CamTilt, 0, 0)); // back from the map
+        if (menu is not (Menu.Map or Menu.World)) cam.transform.SetPositionAndRotation(CamHome, Quaternion.Euler(CamTilt, 0, 0)); // back from the maps
+        if (menu != Menu.World) RestoreCamera(); // the globe darkens the background
         if (menu == Menu.Home)
         {
             RenderHome();
+            return;
+        }
+        if (menu == Menu.World)
+        {
+            BuildGlobe();
             return;
         }
         if (menu == Menu.Catalog)
@@ -392,6 +398,7 @@ public partial class Game : MonoBehaviour
     {
         AnimateHome();
         UpdateMap();
+        UpdateWorld();
         TickStars();
         if (started && !busy && !over && !Paused)
         {
@@ -700,12 +707,6 @@ public partial class Game : MonoBehaviour
     {
         if (!round) InitGui();
         float k = Screen.width / 1080f;
-        if (shopOpen)
-        {
-            GUI.matrix = Matrix4x4.Scale(new Vector3(k, k, 1));
-            ShopCard(1080, Screen.height / k, k);
-            return; // the shop is modal: nothing underneath may take clicks
-        }
         GUI.matrix = Matrix4x4.Scale(new Vector3(k, k, 1));
         float W = 1080, H = Screen.height / k;
         var safe = Screen.safeArea;
@@ -715,13 +716,14 @@ public partial class Game : MonoBehaviour
             case Menu.Home: HomeScreen(W, H, k, top - 30, bottom); return;
             case Menu.Map: MapScreen(W, H, top - 30, bottom); return;
             case Menu.Catalog: CatalogScreen(W, H, top - 30); return;
+            case Menu.World: WorldScreen(W, H, top - 30, bottom); return;
         }
         bool live = !busy && !over && menu == Menu.None;
 
         // top bar: level (red on HARD levels), coins, pause
         Panel(new Rect(40, top, 420, 110), hard ? Red : Cream);
         Label(new Rect(40, top, 420, 110), hard ? $"NIVEAU {LevelName} · HARD" : $"NIVEAU {LevelName}", hard ? 42 : 52, hard ? Color.white : Ink);
-        CoinsButton(500, top, live);
+        CoinsPill(500, top);
         GUI.enabled = live;
         if (Button(new Rect(790, top, 250, 96), "Pause", Mist, 42)) OpenMenu(Menu.Pause);
         GUI.enabled = true;
@@ -750,11 +752,25 @@ public partial class Game : MonoBehaviour
         for (int b = 0; b < 3; b++)
         {
             float x = 45 + b * (bw + 45);
-            bool usable = left[b] > 0 && (b != 0 || history.Count > 0);
-            GUI.enabled = live && usable;
-            if (Button(new Rect(x, by, bw, bh), names[b], usable ? Gold : Mist, 38, icons[b])) UseBonus(b);
+            // a spent bonus can be bought again with coins
+            bool free = left[b] > 0, can = (free || coins >= BonusPrice[b]) && (b != 0 || history.Count > 0);
+            GUI.enabled = live && can;
+            if (Button(new Rect(x, by, bw, bh), names[b], can ? Gold : Mist, 38, icons[b]))
+            {
+                if (!free) BuyBonus(b);
+                UseBonus(b);
+            }
             GUI.enabled = true;
-            if (left[b] > 0) Badge(x + bw - 44, by - 22, left[b].ToString());
+            if (free) Badge(x + bw - 44, by - 22, left[b].ToString());
+            else // price tag
+            {
+                var tag = new Rect(x + bw - 120, by - 28, 150, 60);
+                Panel(tag, Ink);
+                GUI.color = Gold;
+                GUI.DrawTexture(new Rect(tag.x + 14, tag.y + 12, 36, 36), circle);
+                GUI.color = Color.white;
+                Label(new Rect(tag.x + 50, tag.y, tag.width - 56, tag.height), BonusPrice[b].ToString(), 34, Color.white);
+            }
         }
         GUI.enabled = true;
 
@@ -823,15 +839,25 @@ public partial class Game : MonoBehaviour
         GUI.color = Color.white;
     }
 
-    // coins pill; opens the renovation shop, shows "!" when something is affordable
-    void CoinsButton(float x, float y, bool enabled)
+    // coins pill: the money that buys more bonuses once a level's free ones are spent
+    void CoinsPill(float x, float y)
     {
-        GUI.enabled = enabled;
-        if (Button(new Rect(x, y, 250, 96), "", Cream)) OpenShop();
-        GUI.enabled = true;
+        Panel(new Rect(x, y, 250, 96), Cream);
         Panel(new Rect(x + 25, y + 18, 60, 60), Gold);
         Label(new Rect(x + 85, y, 150, 96), coins.ToString(), 50, Ink);
-        if (CanBuyAny) Badge(x + 250 - 44, y - 22, "!");
+    }
+
+    static readonly int[] BonusPrice = { 20, 30, 30 }; // undo, shuffle, +15 s
+
+    void BuyBonus(int b)
+    {
+        coins -= BonusPrice[b];
+        PlayerPrefs.SetInt("coins", coins);
+        PlayerPrefs.Save();
+        if (b == 0) undoLeft++;
+        else if (b == 1) shuffleLeft++;
+        else timeLeft++;
+        Fx.Play("pick");
     }
 
     void UseBonus(int b)

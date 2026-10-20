@@ -237,6 +237,14 @@ public static class Fx
                 Head(new(.92f, .72f), Vector2.right);
                 Head(new(.92f, .28f), Vector2.right);
                 break;
+            case 3: // airliner seen from above, nose up: fuselage, swept wings, tail
+                Line(new(.5f, .12f), new(.5f, .86f));
+                Line(new(.5f, .86f), new(.5f, .9f));
+                heads.Add(new Vector2[] { new(.5f, .66f), new(.06f, .4f), new(.5f, .5f) });
+                heads.Add(new Vector2[] { new(.5f, .66f), new(.94f, .4f), new(.5f, .5f) });
+                heads.Add(new Vector2[] { new(.5f, .24f), new(.3f, .1f), new(.5f, .16f) });
+                heads.Add(new Vector2[] { new(.5f, .24f), new(.7f, .1f), new(.5f, .16f) });
+                break;
             default: // stopwatch
                 Arc(new(.5f, .42f), .32f, 0, 360);
                 Line(new(.5f, .42f), new(.5f, .6f));
@@ -246,7 +254,7 @@ public static class Fx
                 break;
         }
 
-        const float half = .055f; // half the pen width
+        float half = kind == 3 ? .075f : .055f; // half the pen width (a stouter fuselage for the plane)
         var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
         for (int y = 0; y < size; y++)
             for (int x = 0; x < size; x++)

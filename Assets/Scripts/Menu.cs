@@ -2,23 +2,19 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// Title screen and pause menu. The title screen shows the logo over a little display shelf of hopping
-// products (one per country); "JOUER" leads to the map (Map.cs).
+// Title screen and pause menu. The title screen shows the logo over a little shelf playing the game by itself
+// (HomeDemo.cs); "JOUER" leads to the map (Map.cs).
 public partial class Game
 {
-    enum Menu { None, Home, Pause, Map, Catalog }
+    enum Menu { None, Home, Pause, Map, Catalog, World }
 
     Menu menu = Menu.Home;
     float menuAt;
 
-    // title-screen display shelf
-    Transform heroRoot;
-    readonly List<Transform> heroes = new();
+    // title-screen demo shelf (HomeDemo.cs)
     float heroCenterPx = -1; // GUI-canvas y where the display shelf sits, set by HomeScreen's layout
-    // one product per country: croissant, pizza, maki, burger, dango
-    static readonly (int w, int id)[] Heroes = { (0, 1), (1, 0), (2, 0), (3, 0), (2, 4) };
 
-    bool Paused => shopOpen || menu != Menu.None;
+    bool Paused => menu != Menu.None;
 
     static bool SoundOn => PlayerPrefs.GetInt("sound", 1) == 1;
 
@@ -41,42 +37,6 @@ public partial class Game
         if (m != Menu.Pause) Render(); // full screens replace the board (pause overlays it)
     }
 
-    // ---------- title screen: 3D part ----------
-
-    float HeroWorldY()
-    {
-        float px = heroCenterPx > 0 ? heroCenterPx : Screen.height / GuiScale * .55f;
-        return OnBoard(new Vector2(Screen.width / 2f, Screen.height - px * GuiScale)).y - .7f; // .7: shelf under the products' middle
-    }
-
-    void RenderHome()
-    {
-        heroRoot = new GameObject("Hero").transform;
-        heroRoot.SetParent(root);
-        Box(new Vector3(0, -.11f, 0), new Vector3(7.6f, .22f, 1.6f), WoodC).transform.SetParent(heroRoot);
-        Box(new Vector3(0, -.13f, -.81f), new Vector3(7.6f, .16f, .02f), Cream).transform.SetParent(heroRoot);
-        for (int i = 0; i < Heroes.Length; i++)
-        {
-            var t = Wrap(Products.Make(Heroes[i].w, Heroes[i].id), new Vector3((i - 2) * 1.45f, 0, 0), 1.3f, "hero", null).transform;
-            t.SetParent(heroRoot, false);
-            heroes.Add(t);
-        }
-        AnimateHome();
-    }
-
-    // products hop one after the other and sway a little
-    void AnimateHome()
-    {
-        if (menu != Menu.Home || !heroRoot) return;
-        heroRoot.position = new Vector3(0, HeroWorldY(), 0);
-        for (int i = 0; i < heroes.Count; i++)
-        {
-            float hop = Mathf.Max(0, Mathf.Sin(Time.time * 3f - i * .7f));
-            heroes[i].localPosition = new Vector3((i - 2) * 1.45f, .35f * hop * hop, 0);
-            heroes[i].localRotation = Quaternion.Euler(0, 14 * Mathf.Sin(Time.time * 1.3f + i), 0);
-        }
-    }
-
     // ---------- title screen: GUI part ----------
 
     void HomeScreen(float W, float H, float k, float safeTop, float bottom)
@@ -88,7 +48,7 @@ public partial class Game
 
         if (Button(new Rect(40, y, 250, 96), SoundOn ? "Son : oui" : "Son : non", Mist, 38)) ToggleSound();
         if (Application.isEditor && Button(new Rect(40, y + 116, 250, 80), "Catalogue", Mist, 34)) OpenMenu(Menu.Catalog); // editor only: review every product
-        CoinsButton(W - 290, y, true);
+        CoinsPill(W - 290, y);
 
         // logo, tilted like a hand-painted shop sign
         float ly = y + 140;
@@ -101,18 +61,8 @@ public partial class Game
         Panel(tag, Ink);
         Label(tag, "LE TOUR DU MONDE DES RAYONS", 38, Color.white);
 
-        // bottom block, from the bottom up: renovation progress, renovation, stars, play
-        int done = Enumerable.Range(0, Upgrades.Length).Count(Owned);
-        var prog = new Rect(160, bottom - 30, W - 320, 30);
-        Panel(prog, new Color(0, 0, 0, .2f));
-        Panel(new Rect(prog.x, prog.y, Mathf.Max(30, prog.width * done / Upgrades.Length), prog.height), AwningC);
-        Label(new Rect(0, prog.y - 60, W, 50), $"Supérette rénovée {done}/{Upgrades.Length}", 36, Ink);
-
-        var renov = new Rect(160, prog.y - 90 - 120, W - 320, 120);
-        if (Button(renov, "Rénovation", Mist, 50)) OpenShop();
-        if (CanBuyAny) Badge(renov.xMax - 44, renov.y - 22, "!");
-
-        var play = new Rect(60, renov.y - 50 - 210, W - 120, 210);
+        // bottom block: stars, then the play button
+        var play = new Rect(60, bottom - 60 - 210, W - 120, 210);
         float starsY = play.y - 120;
         StarCount(W / 2 - 125, starsY, TotalStars);
 
