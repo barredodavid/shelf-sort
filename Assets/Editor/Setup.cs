@@ -17,6 +17,21 @@ public static class Setup
     {
         if (GraphicsSettings.defaultRenderPipeline == null) EditorApplication.delayCall += SetupUrp;
         if (!AssetDatabase.LoadAssetAtPath<Material>(IcePath)) EditorApplication.delayCall += CreateIceMaterial;
+        if (!AssetDatabase.LoadAssetAtPath<Material>(LitPath)) EditorApplication.delayCall += CreateBaseMaterials;
+    }
+
+    const string LitPath = "Assets/Resources/Lit.mat", UnlitPath = "Assets/Resources/Unlit.mat";
+
+    // Fx.Lit / Fx.Unlit: every runtime material is copied from these. The pipeline's defaultMaterial is null in a
+    // player, so they have to ship as assets (which also keeps their shader variants).
+    [MenuItem("Shelf Sort/Create Base Materials")]
+    public static void CreateBaseMaterials()
+    {
+        if (!AssetDatabase.LoadAssetAtPath<Material>(LitPath))
+            AssetDatabase.CreateAsset(new Material(Shader.Find("Universal Render Pipeline/Lit")), LitPath);
+        if (!AssetDatabase.LoadAssetAtPath<Material>(UnlitPath))
+            AssetDatabase.CreateAsset(new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit")), UnlitPath);
+        AssetDatabase.SaveAssets();
     }
 
     const string IcePath = "Assets/Resources/Ice.mat";

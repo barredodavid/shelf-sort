@@ -217,7 +217,7 @@ public static partial class Products
         var uv = mesh.uv;
         for (int i = 0; i < uv.Length; i++) uv[i].y = Mathf.Asin(Mathf.Clamp(verts[i].y / r, -1, 1)) / Mathf.PI + .5f;
         mesh.uv = uv;
-        var mat = new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial)
+        var mat = new Material(Fx.Lit)
         {
             mainTexture = Resources.Load<Texture2D>("Earth"), mainTextureOffset = new Vector2(.75f, 0), color = Color.white,
         };

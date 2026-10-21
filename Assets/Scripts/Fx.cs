@@ -10,6 +10,10 @@ public static class Fx
     static readonly Dictionary<string, AudioClip> clips = new();
     static Material confettiMat;
 
+    // Base materials shipped in Resources (created by Setup): the pipeline's default materials are editor-only and
+    // null in a build, and primitives keep the built-in pink material unless given one of these.
+    public static readonly Material Lit = Resources.Load<Material>("Lit"), Unlit = Resources.Load<Material>("Unlit");
+
     public static void Init(GameObject host)
     {
         src = host.AddComponent<AudioSource>();
@@ -20,7 +24,7 @@ public static class Fx
         clips["win"] = Arp(new[] { 523f, 659f, 784f, 1047f, 1319f }, .1f, .3f);
         clips["till"] = Arp(new[] { 1568f, 2093f, 2637f }, .045f, .22f); // cash register ka-ching
         clips["lose"] = Arp(new[] { 392f, 330f, 262f, 196f }, .15f, .3f);
-        confettiMat = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultParticleMaterial;
+        confettiMat = Unlit;
     }
 
     // every sound comes with its tap under the finger: light for picks, drops and buttons, medium for a trio, heavy

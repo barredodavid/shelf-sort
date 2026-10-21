@@ -28,6 +28,18 @@ public class BuildIOS : IPostprocessBuildWithReport
         if (report.summary.result != BuildResult.Succeeded) EditorApplication.Exit(1);
     }
 
+    // a local Windows player, for checking player-only behaviour without spending cloud build minutes: build/win
+    public static void BuildWindows()
+    {
+        var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+        {
+            scenes = new[] { "Assets/Scenes/Main.unity" },
+            locationPathName = "build/win/ShelfSort.exe",
+            target = BuildTarget.StandaloneWindows64,
+        });
+        if (report.summary.result != BuildResult.Succeeded) EditorApplication.Exit(1);
+    }
+
     public int callbackOrder => 0;
 
     public void OnPostprocessBuild(BuildReport report)

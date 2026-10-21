@@ -242,7 +242,7 @@ public static partial class Products
     {
         var go = new GameObject(name);
         go.AddComponent<MeshFilter>().sharedMesh = mesh;
-        var mat = new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial)
+        var mat = new Material(Fx.Lit)
         {
             mainTexture = cv.Bake(),
             color = Color.white,

@@ -80,7 +80,7 @@ public partial class Game
             return model.transform;
         }
         Add(GameObject.CreatePrimitive(PrimitiveType.Cube), new Vector3(0, 0, 0)).localScale = new Vector3(3.4f, .22f, 1.6f); // the plank
-        stage.GetChild(0).GetComponent<Renderer>().material.color = WoodC;
+        stage.GetChild(0).GetComponent<Renderer>().material = new Material(Fx.Lit) { color = WoodC };
         Destroy(stage.GetChild(0).GetComponent<Collider>());
         switch (intros[0].key)
         {

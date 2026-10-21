@@ -131,7 +131,7 @@ public partial class Game : MonoBehaviour
             // colors show exactly as baked. URP Lit ignores Renderer.receiveShadows, so stray shelf shadows came through.
             var wr = wall.GetComponent<Renderer>();
             wr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            wr.material = new Material(GraphicsSettings.currentRenderPipeline.defaultParticleMaterial) { color = Color.white };
+            wr.material = new Material(Fx.Unlit) { color = Color.white };
         }
         if (wallTex) Destroy(wallTex); // only our own previous bake: the material starts with a built-in texture asset
         wallTex = tex;
@@ -277,7 +277,7 @@ public partial class Game : MonoBehaviour
         go.transform.SetParent(root);
         go.transform.position = pos;
         go.transform.localScale = size;
-        go.GetComponent<Renderer>().material.color = c;
+        go.GetComponent<Renderer>().material = new Material(Fx.Lit) { color = c };
         return go;
     }
 

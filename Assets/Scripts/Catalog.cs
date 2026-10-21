@@ -16,7 +16,7 @@ public partial class Game
 
     void RenderCatalog()
     {
-        silhouette ??= new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial) { color = new Color(.22f, .24f, .3f) };
+        silhouette ??= new Material(Fx.Lit) { color = new Color(.22f, .24f, .3f) };
         float H = Screen.height / GuiScale, top = SafeTopPx() + CatalogTop, rowPx = (H - top - 60) / 4;
         for (int r = 0; r < 4; r++)
         {

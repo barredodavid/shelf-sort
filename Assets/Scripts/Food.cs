@@ -852,7 +852,7 @@ public static partial class Products
     {
         if (!plainMats.TryGetValue((c, smooth), out var m))
         {
-            m = new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial) { color = c };
+            m = new Material(Fx.Lit) { color = c };
             m.SetFloat("_Smoothness", smooth);
             plainMats[(c, smooth)] = m;
         }
@@ -861,7 +861,7 @@ public static partial class Products
 
     static Material Textured(Canvas cv, float smooth)
     {
-        var m = new Material(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline.defaultMaterial)
+        var m = new Material(Fx.Lit)
         {
             mainTexture = cv.Bake(),
             color = Color.white,
