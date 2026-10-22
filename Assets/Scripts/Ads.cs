@@ -8,8 +8,8 @@ using UnityEngine;
 // ad is ready, the bonus is given without an ad.
 public partial class Game
 {
-    // ponytail: Google's test ad until the app is live on the App Store and approved by AdMob; false for that build
-    const bool TestAds = true;
+    // true: Google's test ad, loaded even without a consent answer, to check the ad SDK on a TestFlight build
+    const bool TestAds = false;
     const string RewardedId = TestAds ? "ca-app-pub-3940256099942544/1712485313" : "ca-app-pub-1022303366789247/9029642270";
 
     RewardedAd rewarded;
