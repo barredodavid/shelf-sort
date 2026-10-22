@@ -465,6 +465,7 @@ public partial class Game : MonoBehaviour
         if (recordDir != null) ScreenCapture.CaptureScreenshot($"{recordDir}/{recordFrame++:D5}.png", 2); // at frame end
         if (shotsDir != null && Input.GetKeyDown(KeyCode.F12))
             ScreenCapture.CaptureScreenshot($"{shotsDir}/{System.DateTime.Now:HHmmss_fff}.png", 3);
+        AskTracking();
         AnimateHome();
         UpdateMap();
         UpdateWorld();
