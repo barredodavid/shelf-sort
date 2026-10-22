@@ -71,6 +71,25 @@ public partial class Game : MonoBehaviour
         root = new GameObject("Board").transform;
         Fx.Init(gameObject);
         ApplySound();
+        // -record <dir>: saves every frame at twice the window size, 30 fps of game time, for the App Store preview
+        // video (BuildIOS.EncodePreview turns the frames into an .mp4)
+        var args = System.Environment.GetCommandLineArgs();
+        int rec = System.Array.IndexOf(args, "-record");
+        if (rec >= 0)
+        {
+            recordDir = args[rec + 1];
+            Time.captureFramerate = 30; // game time steps 1/30 s per frame however long the capture takes
+            Application.runInBackground = true;
+        }
+        // -set key=1,lang=en: saved progress to start from (stars, coins, language...), to film the later countries
+        int set = System.Array.IndexOf(args, "-set");
+        if (set >= 0)
+            foreach (var kv in args[set + 1].Split(','))
+            {
+                var p = kv.Split('=');
+                if (int.TryParse(p[1], out int v)) PlayerPrefs.SetInt(p[0], v);
+                else PlayerPrefs.SetString(p[0], p[1]);
+            }
 
         coins = PlayerPrefs.GetInt("coins", 0);
         world = PlayerPrefs.GetInt("world", 0); // where the truck waits on the map
@@ -137,6 +156,9 @@ public partial class Game : MonoBehaviour
         wallTex = tex;
         wall.GetComponent<Renderer>().material.mainTexture = tex;
     }
+
+    string recordDir; // set by -record; Update saves the frame (not a coroutine: StartLevel stops them all)
+    int recordFrame;
 
     void StartLevel()
     {
@@ -432,6 +454,7 @@ public partial class Game : MonoBehaviour
 
     void Update()
     {
+        if (recordDir != null) ScreenCapture.CaptureScreenshot($"{recordDir}/{recordFrame++:D5}.png", 2); // at frame end
         AnimateHome();
         UpdateMap();
         UpdateWorld();
