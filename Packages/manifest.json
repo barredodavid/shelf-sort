@@ -3,10 +3,11 @@
     {
       "name": "OpenUPM",
       "url": "https://package.openupm.com",
-      "scopes": ["com.google"]
+      "scopes": ["com.google", "com.gameanalytics"]
     }
   ],
   "dependencies": {
+    "com.gameanalytics.sdk": "8.3.0",
     "com.google.ads.mobile": "11.6.0",
     "com.unity.multiplayer.center": "1.0.1",
     "com.unity.render-pipelines.universal": "17.6.0",

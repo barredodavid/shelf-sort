@@ -72,6 +72,7 @@ public partial class Game : MonoBehaviour
         Fx.Init(gameObject);
         ApplySound();
         InitAds();
+        InitAnalytics();
         // -record <dir>: saves every frame at twice the window size, 30 fps of game time, for the App Store preview
         // video (BuildIOS.EncodePreview turns the frames into an .mp4)
         var args = System.Environment.GetCommandLineArgs();
@@ -175,6 +176,7 @@ public partial class Game : MonoBehaviour
         dragGo = null;
         dragS = -1;
         busy = over = adUsed = won = usedBonus = started = false;
+        TrackLevel(GameAnalyticsSDK.GAProgressionStatus.Start);
         history.Clear();
         undoLeft = shuffleLeft = timeLeft = daily && DailyTwist == 2 ? 0 : 1; // the "no bonus" challenge
         combo = 0;
@@ -687,6 +689,7 @@ public partial class Game : MonoBehaviour
         over = won = true;
         overAt = Time.time;
         ScoreLevel();
+        TrackLevel(GameAnalyticsSDK.GAProgressionStatus.Complete, starsWon);
         Fx.Play("win");
         Fx.Burst(new Vector3(-2, 1, -2), 40);
         Fx.Burst(new Vector3(2, 1, -2), 40);
@@ -697,6 +700,7 @@ public partial class Game : MonoBehaviour
         if (over) return;
         over = true;
         overAt = Time.time;
+        TrackLevel(GameAnalyticsSDK.GAProgressionStatus.Fail);
         title = msg;
         subtitle = "Tu y étais presque !";
         Fx.Play("lose");

@@ -40,7 +40,38 @@ public static class Setup
         AssetDatabase.SaveAssets();
     }
 
-    const string LitPath ="Assets/Resources/Lit.mat", UnlitPath = "Assets/Resources/Unlit.mat";
+    // GameAnalytics' settings asset with the iOS keys, from the GA_GAME_KEY / GA_SECRET_KEY environment variables
+    // (Unity Build Automation's build target variables). The asset is git-ignored: the repo is public.
+    public static void SetGameAnalyticsKeys()
+    {
+        string game = System.Environment.GetEnvironmentVariable("GA_GAME_KEY"), secret = System.Environment.GetEnvironmentVariable("GA_SECRET_KEY");
+        if (string.IsNullOrEmpty(game) || string.IsNullOrEmpty(secret))
+        {
+            Debug.LogWarning("Shelf Sort: GA_GAME_KEY / GA_SECRET_KEY not set, GameAnalytics keys left as they are");
+            return;
+        }
+        const string path = "Assets/Resources/GameAnalytics/Settings.asset";
+        var s = AssetDatabase.LoadAssetAtPath<GameAnalyticsSDK.Setup.Settings>(path);
+        if (!s)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            s = ScriptableObject.CreateInstance<GameAnalyticsSDK.Setup.Settings>();
+            AssetDatabase.CreateAsset(s, path);
+        }
+        int i = s.Platforms.IndexOf(RuntimePlatform.IPhonePlayer);
+        if (i < 0)
+        {
+            s.AddPlatform(RuntimePlatform.IPhonePlayer);
+            i = s.Platforms.Count - 1;
+        }
+        s.UpdateGameKey(i, game);
+        s.UpdateSecretKey(i, secret);
+        if (s.GetGameKey(i) != game || s.GetSecretKey(i) != secret) Debug.LogError("Shelf Sort: GameAnalytics refused the keys");
+        EditorUtility.SetDirty(s);
+        AssetDatabase.SaveAssets();
+    }
+
+    const string LitPath = "Assets/Resources/Lit.mat", UnlitPath = "Assets/Resources/Unlit.mat";
 
     // Fx.Lit / Fx.Unlit: every runtime material is copied from these. The pipeline's defaultMaterial is null in a
     // player, so they have to ship as assets (which also keeps their shader variants).

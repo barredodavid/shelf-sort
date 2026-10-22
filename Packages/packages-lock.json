@@ -1,5 +1,12 @@
 {
   "dependencies": {
+    "com.gameanalytics.sdk": {
+      "version": "8.3.0",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://package.openupm.com"
+    },
     "com.google.ads.mobile": {
       "version": "11.6.0",
       "depth": 0,

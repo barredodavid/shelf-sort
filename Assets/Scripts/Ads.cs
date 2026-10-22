@@ -52,12 +52,18 @@ public partial class Game
         if (!Application.isMobilePlatform) { reward(); return; }
         if (rewarded == null || !rewarded.CanShowAd())
         {
+            TrackAd(GameAnalyticsSDK.GAAdAction.FailedShow);
             Toast("Pas de pub disponible");
             LoadRewarded();
             return;
         }
         var ad = rewarded;
         rewarded = null;
-        ad.Show(_ => reward());
+        TrackAd(GameAnalyticsSDK.GAAdAction.Show);
+        ad.Show(_ =>
+        {
+            TrackAd(GameAnalyticsSDK.GAAdAction.RewardReceived);
+            reward();
+        });
     }
 }

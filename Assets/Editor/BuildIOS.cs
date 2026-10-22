@@ -7,13 +7,15 @@ using UnityEngine;
 // set as the build target's "Pre-Export method": BuildIOS.PreExport):
 //  - a build number that always goes up (the date and time), since App Store Connect refuses one already uploaded;
 //  - iPhone only, so the store asks for no iPad screenshots;
-//  - Info.plist says the app uses no encryption beyond Apple's, so TestFlight doesn't hold each build on that question.
+//  - Info.plist says the app uses no encryption beyond Apple's, so TestFlight doesn't hold each build on that question;
+//  - GameAnalytics' keys, from the build target's GA_GAME_KEY / GA_SECRET_KEY variables.
 public class BuildIOS : IPostprocessBuildWithReport
 {
     public static void PreExport()
     {
         PlayerSettings.iOS.buildNumber = System.DateTime.UtcNow.ToString("yyMMdd.HHmm"); // e.g. 261021.1435: two numbers, always rising
         PlayerSettings.iOS.targetDevice = iOSTargetDevice.iPhoneOnly;
+        Setup.SetGameAnalyticsKeys();
     }
 
     // a local export, for testing: build/ios
