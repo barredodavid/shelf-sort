@@ -83,6 +83,10 @@ public partial class Game : MonoBehaviour
             Time.captureFramerate = 30; // game time steps 1/30 s per frame however long the capture takes
             Application.runInBackground = true;
         }
+        // -shots <dir>: F12 saves the screen at three times the window size, for the App Store screenshots
+        // (a 430x932 window gives the 1290x2796 of a 6.9" iPhone)
+        int shots = System.Array.IndexOf(args, "-shots");
+        if (shots >= 0) shotsDir = args[shots + 1];
         // -set key=1,lang=en: saved progress to start from (stars, coins, language...), to film the later countries
         int set = System.Array.IndexOf(args, "-set");
         if (set >= 0)
@@ -161,6 +165,7 @@ public partial class Game : MonoBehaviour
 
     string recordDir; // set by -record; Update saves the frame (not a coroutine: StartLevel stops them all)
     int recordFrame;
+    string shotsDir; // set by -shots
 
     void StartLevel()
     {
@@ -458,6 +463,8 @@ public partial class Game : MonoBehaviour
     void Update()
     {
         if (recordDir != null) ScreenCapture.CaptureScreenshot($"{recordDir}/{recordFrame++:D5}.png", 2); // at frame end
+        if (shotsDir != null && Input.GetKeyDown(KeyCode.F12))
+            ScreenCapture.CaptureScreenshot($"{shotsDir}/{System.DateTime.Now:HHmmss_fff}.png", 3);
         AnimateHome();
         UpdateMap();
         UpdateWorld();
