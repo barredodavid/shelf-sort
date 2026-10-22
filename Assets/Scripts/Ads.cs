@@ -22,8 +22,20 @@ public partial class Game
         ConsentInformation.Update(new ConsentRequestParameters(), _ =>
             ConsentForm.LoadAndShowConsentFormIfRequired(_ =>
             {
+                // Apple's tracking prompt, asked here too: AdMob only serves its IDFA message once it has reviewed the
+                // app, and App Review wants the prompt. iOS shows it only once, so no double with Google's message.
+                GameAnalyticsSDK.GameAnalytics.RequestTrackingAuthorization(new IgnoreTrackingAnswer());
                 if (ConsentInformation.CanRequestAds()) MobileAds.Initialize(_ => LoadRewarded());
             }));
+    }
+
+    // the answer reaches the ad SDKs through iOS itself
+    class IgnoreTrackingAnswer : GameAnalyticsSDK.IGameAnalyticsATTListener
+    {
+        public void GameAnalyticsATTListenerNotDetermined() { }
+        public void GameAnalyticsATTListenerRestricted() { }
+        public void GameAnalyticsATTListenerDenied() { }
+        public void GameAnalyticsATTListenerAuthorized() { }
     }
 
     // where the law asks for it (GDPR, US states), the pause menu lets the player reopen Google's consent choices
