@@ -14,6 +14,10 @@ public partial class Game
 
     RewardedAd rewarded;
 
+    // Ads wait for a known consent. Test builds skip that: before AdMob reviews the app, Google's consent form fails
+    // and no ad would ever load, so the SDK could not be checked on a phone.
+    static bool CanRequestAds => TestAds || ConsentInformation.CanRequestAds();
+
     void InitAds()
     {
         if (!Application.isMobilePlatform) return;
@@ -25,7 +29,7 @@ public partial class Game
                 // Apple's tracking prompt, asked here too: AdMob only serves its IDFA message once it has reviewed the
                 // app, and App Review wants the prompt. iOS shows it only once, so no double with Google's message.
                 GameAnalyticsSDK.GameAnalytics.RequestTrackingAuthorization(new IgnoreTrackingAnswer());
-                if (ConsentInformation.CanRequestAds()) MobileAds.Initialize(_ => LoadRewarded());
+                if (CanRequestAds) MobileAds.Initialize(_ => LoadRewarded());
             }));
     }
 
@@ -44,12 +48,12 @@ public partial class Game
 
     void ShowPrivacyOptions() => ConsentForm.ShowPrivacyOptionsForm(_ =>
     {
-        if (ConsentInformation.CanRequestAds()) MobileAds.Initialize(_ => LoadRewarded()); // the new choice applies to the next ad
+        if (CanRequestAds) MobileAds.Initialize(_ => LoadRewarded()); // the new choice applies to the next ad
     });
 
     void LoadRewarded()
     {
-        if (!ConsentInformation.CanRequestAds()) return;
+        if (!CanRequestAds) return;
         RewardedAd.Load(RewardedId, new AdRequest(), (ad, error) =>
         {
             if (error != null || ad == null) return; // tried again on the next tap
