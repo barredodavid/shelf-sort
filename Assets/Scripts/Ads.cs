@@ -22,6 +22,9 @@ public partial class Game
     {
         if (!Application.isMobilePlatform) return;
         MobileAds.RaiseAdEventsOnUnityMainThread = true;
+        // that queues every callback, consent ones included, for an executor that only MobileAds.Initialize creates,
+        // which we call from the consent callback: create it first, or the consent answer never arrives
+        GoogleMobileAds.Common.MobileAdsEventExecutor.Initialize();
         // offline, Update fails but a consent given before still lets ads load
         ConsentInformation.Update(new ConsentRequestParameters(), _ =>
             ConsentForm.LoadAndShowConsentFormIfRequired(_ =>
