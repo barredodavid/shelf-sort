@@ -143,7 +143,8 @@ public partial class Game
         var keep = GUI.matrix;
         GUIUtility.ScaleAroundPivot(Vector2.one * PopIn(menuAt), new Vector2(W / 2 * k, H / 2 * k));
 
-        var card = new Rect(90, H / 2 - 450, W - 180, 900);
+        bool privacy = PrivacyOptionsRequired; // one more row: reopen the ad consent choices
+        var card = new Rect(90, H / 2 - (privacy ? 520 : 450), W - 180, privacy ? 1040 : 900);
         Panel(new Rect(card.x, card.y + 18, card.width, card.height), Darker(Cream));
         Panel(card, Cream);
         Label(new Rect(card.x, card.y + 50, card.width, 130), "PAUSE", 100, Red, true);
@@ -153,6 +154,7 @@ public partial class Game
         if (Button(new Rect(bx, card.y + 410, bw, 130), "Recommencer", Mist, 46)) { StartLevel(); menu = Menu.None; }
         if (Button(new Rect(bx, card.y + 580, bw, 130), daily ? "Accueil" : "Carte", Mist, 46)) LeaveLevel();
         if (Button(new Rect(bx, card.y + 750, bw, 110), SoundOn ? "Son : oui" : "Son : non", Mist, 40)) ToggleSound();
+        if (privacy && Button(new Rect(bx, card.y + 890, bw, 110), "Confidentialité", Mist, 40)) ShowPrivacyOptions();
         GUI.matrix = keep;
     }
 }

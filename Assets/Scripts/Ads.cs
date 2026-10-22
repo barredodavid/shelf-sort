@@ -26,6 +26,15 @@ public partial class Game
             }));
     }
 
+    // where the law asks for it (GDPR, US states), the pause menu lets the player reopen Google's consent choices
+    static bool PrivacyOptionsRequired => Application.isMobilePlatform &&
+        ConsentInformation.PrivacyOptionsRequirementStatus == PrivacyOptionsRequirementStatus.Required;
+
+    void ShowPrivacyOptions() => ConsentForm.ShowPrivacyOptionsForm(_ =>
+    {
+        if (ConsentInformation.CanRequestAds()) MobileAds.Initialize(_ => LoadRewarded()); // the new choice applies to the next ad
+    });
+
     void LoadRewarded()
     {
         if (!ConsentInformation.CanRequestAds()) return;
