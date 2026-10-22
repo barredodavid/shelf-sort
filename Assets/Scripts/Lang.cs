@@ -48,7 +48,7 @@ public partial class Game
         ["Fais un trio à côté !"] = "Make a trio next to it!", ["Glacé !"] = "Frozen!",
         ["SUPER ! x2"] = "SUPER! x2", ["GÉNIAL ! x3"] = "GREAT! x3", ["INCROYABLE ! x{0}"] = "AMAZING! x{0}", ["+{0} PIÈCES !"] = "+{0} COINS!",
         ["Pub : +15 secondes"] = "Ad: +15 seconds", ["Pub : annuler 2 coups"] = "Ad: undo 2 moves",
-        ["Pas de pub disponible"] = "No ad available", ["Confidentialité"] = "Privacy",
+        ["Confidentialité"] = "Privacy",
         // end of level
         ["PARFAIT !"] = "PERFECT!", ["BRAVO !"] = "WELL DONE!", ["En {0} coups ou moins ({1} coups)"] = "In {0} moves or fewer ({1} moves)",
         ["Plus de 40 % du temps restant ({0} %)"] = "Over 40% of the time left ({0}%)", ["Sans bonus ni pub"] = "No bonus, no ad",

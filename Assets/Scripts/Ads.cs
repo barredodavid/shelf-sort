@@ -4,8 +4,8 @@ using UnityEngine;
 
 // Rewarded ads (AdMob) behind the "+15 seconds / undo 2 moves" button of a lost level. Consent comes first: Google's
 // UMP shows the GDPR form and then Apple's tracking prompt (both messages are set up in AdMob, Privacy & messaging),
-// then one rewarded ad is kept loaded, reloaded after each showing. Off phones (editor, Windows player) the bonus is
-// given without an ad.
+// then one rewarded ad is kept loaded, reloaded after each showing. Off phones (editor, Windows player), or when no
+// ad is ready, the bonus is given without an ad.
 public partial class Game
 {
     // ponytail: Google's test ad until the app is live on the App Store and approved by AdMob; false for that build
@@ -52,9 +52,10 @@ public partial class Game
         if (!Application.isMobilePlatform) { reward(); return; }
         if (rewarded == null || !rewarded.CanShowAd())
         {
+            // no ad to show (offline, no fill, consent refused...): the player keeps the bonus anyway
             TrackAd(GameAnalyticsSDK.GAAdAction.FailedShow);
-            Toast("Pas de pub disponible");
             LoadRewarded();
+            reward();
             return;
         }
         var ad = rewarded;
