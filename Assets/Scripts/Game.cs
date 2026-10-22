@@ -71,6 +71,7 @@ public partial class Game : MonoBehaviour
         root = new GameObject("Board").transform;
         Fx.Init(gameObject);
         ApplySound();
+        InitAds();
         // -record <dir>: saves every frame at twice the window size, 30 fps of game time, for the App Store preview
         // video (BuildIOS.EncodePreview turns the frames into an .mp4)
         var args = System.Environment.GetCommandLineArgs();
@@ -701,15 +702,14 @@ public partial class Game : MonoBehaviour
         Fx.Play("lose");
     }
 
-    void ContinueAfterAd()
+    void ContinueAfterAd() => ShowRewarded(() =>
     {
-        // ponytail: fake rewarded ad; plug the ad SDK (LevelPlay/AppLovin) here
         adUsed = true;
         over = false;
         if (time <= 0) { time = 15; total = Mathf.Max(total, 15); }
         else for (int k = 0; k < 2 && history.Count > 0; k++) shelves = history.Pop();
         Render();
-    }
+    });
 
     void Toast(string t) { toast = t; toastUntil = Time.time + 1f; }
 

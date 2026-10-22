@@ -20,7 +20,27 @@ public static class Setup
         if (!AssetDatabase.LoadAssetAtPath<Material>(LitPath)) EditorApplication.delayCall += CreateBaseMaterials;
     }
 
-    const string LitPath = "Assets/Resources/Lit.mat", UnlitPath = "Assets/Resources/Unlit.mat";
+    // AdMob's settings asset (the plugin writes the app id and the tracking prompt's text into Info.plist from it)
+    [MenuItem("Shelf Sort/Set AdMob Settings")]
+    public static void SetAdMobSettings()
+    {
+        const string path = "Assets/GoogleMobileAds/Resources/GoogleMobileAdsSettings.asset";
+        var asset = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+        if (!asset)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            asset = ScriptableObject.CreateInstance("GoogleMobileAds.Editor.GoogleMobileAdsSettings");
+            AssetDatabase.CreateAsset(asset, path);
+        }
+        var so = new SerializedObject(asset);
+        so.FindProperty("adMobIOSAppId").stringValue = "ca-app-pub-1022303366789247~5032143784";
+        so.FindProperty("userTrackingUsageDescription").stringValue =
+            "Your data will be used to show you more relevant ads, which keep Shelf Sort free.";
+        so.ApplyModifiedPropertiesWithoutUndo();
+        AssetDatabase.SaveAssets();
+    }
+
+    const string LitPath ="Assets/Resources/Lit.mat", UnlitPath = "Assets/Resources/Unlit.mat";
 
     // Fx.Lit / Fx.Unlit: every runtime material is copied from these. The pipeline's defaultMaterial is null in a
     // player, so they have to ship as assets (which also keeps their shader variants).
