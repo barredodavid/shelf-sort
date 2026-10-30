@@ -47,13 +47,14 @@ public partial class Game
 
     static float Hash01(int a, int b) => Mathf.Abs(Mathf.Sin(a * 12.9898f + b * 78.233f) * 43758.5453f) % 1;
 
-    // every country and every level is open while testing in the editor (see also openWorlds)
-    bool Reachable(int g) => openWorlds[g / LevelsPerWorld] && (LevelOpen(g / LevelsPerWorld, g % LevelsPerWorld) || Application.isEditor);
+    // every country and every level is open while testing in the editor, and in the web demo of the portfolio
+    static bool AllOpen => Application.isEditor || Application.platform == RuntimePlatform.WebGLPlayer;
+    bool Reachable(int g) => openWorlds[g / LevelsPerWorld] && (LevelOpen(g / LevelsPerWorld, g % LevelsPerWorld) || AllOpen);
 
     void RefreshStars()
     {
         mapStars = TotalStars;
-        for (int w = 0; w < Worlds.Length; w++) openWorlds[w] = mapStars >= Worlds[w].need || Application.isEditor;
+        for (int w = 0; w < Worlds.Length; w++) openWorlds[w] = mapStars >= Worlds[w].need || AllOpen;
     }
 
     Vector3 TruckPos(float t) => MapPos(t);
