@@ -43,6 +43,32 @@ public class BuildIOS : IPostprocessBuildWithReport
         if (report.summary.result != BuildResult.Succeeded) EditorApplication.Exit(1);
     }
 
+    // the web build for the portfolio, the game in a phone-shaped frame: build/webgl. The default template pins the
+    // canvas at 960x600 on desktop; it fills its frame instead.
+    public static void BuildWebGL()
+    {
+        const string dir = "build/webgl";
+        var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+        {
+            scenes = new[] { "Assets/Scenes/Main.unity" },
+            locationPathName = dir,
+            target = BuildTarget.WebGL,
+        });
+        if (report.summary.result != BuildResult.Succeeded)
+        {
+            EditorApplication.Exit(1);
+            return;
+        }
+        string index = $"{dir}/index.html", css = $"{dir}/TemplateData/style.css";
+        System.IO.File.WriteAllText(index, System.IO.File.ReadAllText(index)
+            .Replace("canvas.style.width = \"960px\";", "canvas.style.width = \"100%\";")
+            .Replace("canvas.style.height = \"600px\";", "canvas.style.height = \"100%\";"));
+        System.IO.File.WriteAllText(css, System.IO.File.ReadAllText(css)
+            .Replace("#unity-container.unity-desktop { left: 50%; top: 50%; transform: translate(-50%, -50%) }",
+                     "#unity-container.unity-desktop { position: fixed; width: 100%; height: 100% }")
+            .Replace("#unity-canvas { background: #231F20 }", "#unity-canvas { background: #231F20; width: 100%; height: 100% }"));
+    }
+
     // App Store preview: the frames a player saved with -record <dir> (see Game.Record) into <dir>.mp4, H.264 at 30 fps
     // usage: Unity -batchmode -quit -executeMethod BuildIOS.EncodePreview -frames <dir>
     public static void EncodePreview()

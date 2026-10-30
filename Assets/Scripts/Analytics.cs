@@ -3,7 +3,7 @@ using UnityEngine;
 
 // GameAnalytics: sessions, retention and devices come by themselves; the game adds its levels (start, complete with
 // the stars as score, fail), which gives the funnel of where players give up, and its rewarded ads. Phones only: the
-// editor and the Windows player send nothing. Keys: Setup.SetGameAnalyticsKeys.
+// editor, the Windows player and the web build send nothing. Keys: Setup.SetGameAnalyticsKeys.
 public partial class Game
 {
     // progression names must be plain ASCII, so not the countries' displayed names
@@ -11,7 +11,7 @@ public partial class Game
 
     void InitAnalytics()
     {
-        if (!Application.isMobilePlatform) return;
+        if (!OnPhone) return;
         new GameObject("GameAnalytics").AddComponent<GameAnalytics>();
         GameAnalytics.Initialize();
     }

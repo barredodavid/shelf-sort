@@ -18,9 +18,13 @@ public partial class Game
     // and no ad would ever load, so the SDK could not be checked on a phone.
     static bool CanRequestAds => TestAds || ConsentInformation.CanRequestAds();
 
+    // the phone app, not the web build opened in a phone's browser (Application.isMobilePlatform is true there too):
+    // the ad and analytics SDKs only run in the app
+    static bool OnPhone => Application.isMobilePlatform && Application.platform != RuntimePlatform.WebGLPlayer;
+
     void InitAds()
     {
-        if (!Application.isMobilePlatform) return;
+        if (!OnPhone) return;
         MobileAds.RaiseAdEventsOnUnityMainThread = true;
         // that queues every callback, consent ones included, for an executor that only MobileAds.Initialize creates,
         // which we call from the consent callback: create it first, or the consent answer never arrives
@@ -57,7 +61,7 @@ public partial class Game
     }
 
     // where the law asks for it (GDPR, US states), the pause menu lets the player reopen Google's consent choices
-    static bool PrivacyOptionsRequired => Application.isMobilePlatform &&
+    static bool PrivacyOptionsRequired => OnPhone &&
         ConsentInformation.PrivacyOptionsRequirementStatus == PrivacyOptionsRequirementStatus.Required;
 
     void ShowPrivacyOptions() => ConsentForm.ShowPrivacyOptionsForm(_ =>
@@ -79,7 +83,7 @@ public partial class Game
 
     void ShowRewarded(System.Action reward)
     {
-        if (!Application.isMobilePlatform) { reward(); return; }
+        if (!OnPhone) { reward(); return; }
         if (rewarded == null || !rewarded.CanShowAd())
         {
             // no ad to show (offline, no fill, consent refused...): the player keeps the bonus anyway
