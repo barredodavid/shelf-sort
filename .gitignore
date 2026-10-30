@@ -18,3 +18,5 @@ create.log
 # GameAnalytics keys: filled from GA_GAME_KEY / GA_SECRET_KEY by Setup.SetGameAnalyticsKeys (the repo is public)
 /Assets/Resources/GameAnalytics/
 /Assets/Resources/GameAnalytics.meta
+# Ad Capture videos (Tools > Ad Capture > Record)
+/AdCapture/Output/
