@@ -102,14 +102,14 @@ public partial class Game
             OpenWorldMap(-1);
         }
 
-        float pulse = 1 + .03f * Mathf.Sin(Time.time * 4); // gently breathing call to action
+        float pulse = 1 + .012f * Mathf.Sin(Time.time * 2.5f); // gently breathing call to action
         keep = GUI.matrix;
         GUIUtility.ScaleAroundPivot(Vector2.one * pulse, play.center * k);
         if (Button(play, "", Gold)) OpenMenu(Menu.Map);
         Label(new Rect(play.x, play.y + 18, play.width, 130), "JOUER", 110, Ink);
         Label(new Rect(play.x, play.y + 142, play.width, 60), Tf("Niveau {0}-{1}", world + 1, FirstToPlay(world) + 1), 40, new Color(Ink.r, Ink.g, Ink.b, .7f));
         // a shine sweeping across every few seconds
-        float t = Mathf.Repeat(Time.time, 3f);
+        float t = Mathf.Repeat(Time.time, 5f);
         if (t < .7f)
         {
             GUI.BeginGroup(play);
@@ -117,6 +117,13 @@ public partial class Game
             GUI.EndGroup();
         }
         GUI.matrix = keep;
+        // the portfolio's web demo opens everything (Map.AllOpen): say so under the button
+        if (AllOpen && !Application.isEditor)
+        {
+            var demo = new Rect(W / 2 - 340, play.yMax + 8, 680, 56);
+            Panel(demo, Red);
+            Label(demo, "VERSION DÉMO : TOUT EST OUVERT", 38, Color.white);
+        }
 
         heroCenterPx = (tag.yMax + country.y) / 2 + 40; // a little low: the flag and the monument stand on the shelf
     }

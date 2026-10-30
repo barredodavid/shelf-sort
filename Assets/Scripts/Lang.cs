@@ -30,7 +30,7 @@ public partial class Game
         ["TOUR EIFFEL"] = "EIFFEL TOWER", ["COLISÉE"] = "COLOSSEUM", ["MONT FUJI"] = "MOUNT FUJI", ["NEW YORK"] = "NEW YORK",
         // title screen, menus
         ["Collection"] = "Collection", ["Trophées"] = "Trophies", ["LE TOUR DU MONDE DES RAYONS"] = "A WORLD TOUR OF THE AISLES",
-        ["JOUER"] = "PLAY", ["Niveau {0}-{1}"] = "Level {0}-{1}", ["Défi du jour"] = "Daily challenge", ["Défi réussi"] = "Challenge done",
+        ["JOUER"] = "PLAY", ["VERSION DÉMO : TOUT EST OUVERT"] = "DEMO VERSION: EVERYTHING IS OPEN", ["Niveau {0}-{1}"] = "Level {0}-{1}", ["Défi du jour"] = "Daily challenge", ["Défi réussi"] = "Challenge done",
         ["PAUSE"] = "PAUSE", ["Reprendre"] = "Resume", ["Recommencer"] = "Restart", ["Accueil"] = "Home", ["Carte"] = "Map",
         ["Son : oui"] = "Sound: on", ["Son : non"] = "Sound: off", ["Retour"] = "Back", ["Monde"] = "World",
         // map
